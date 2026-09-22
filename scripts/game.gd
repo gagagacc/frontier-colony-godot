@@ -75,6 +75,8 @@ var auto_menu := 1
 var auto_flow := -1
 ## 截图用：生成世界后直接停在「选降落点」那一屏
 var auto_landing := 0
+## 截图用：把本局时间直接推到某一刻（看昼夜光照）
+var auto_time := 0.0
 ## 自动截图：跑一遍存/读档往返（阶段 12 的实机验证）
 var auto_saveload := 0
 ## 阶段 11：暂停 + 面板（Control 节点替代 DOM）
@@ -126,6 +128,8 @@ func _parse_cli() -> void:
 			auto_flow = a.substr(7).to_int()
 		elif a.begins_with("--landing="):
 			auto_landing = a.substr(10).to_int()
+		elif a.begins_with("--time="):
+			auto_time = a.substr(7).to_float()
 	if seed_text == "" or seed_text == "frontier-golden-a":
 		if shot_path == "":
 			seed_text = "frontier-%d" % (Time.get_ticks_msec() % 100000)
@@ -271,6 +275,8 @@ func _build_world_systems() -> void:
 	enemies.town_ref = town
 	enemies.towers_ref2 = towers
 	player.hurt.connect(func(mag: float) -> void: cam_rig.shake(mag))
+	lighting = Lighting.new()
+	lighting.setup(self)
 	_build_action_bar()
 	_build_gamepad_hint()
 	_build_hud()
@@ -314,6 +320,7 @@ func _build_world_systems() -> void:
 
 	# 到这一步才算「落地」：前置界面收起来，HUD/行动栏显示，模拟开始推进。
 	playing = true
+	run_time = auto_time   # --time=N 直接把昼夜推到第 N 秒（截图用）
 	if front_end != null:
 		front_end.detach()
 		front_end = null
@@ -723,6 +730,11 @@ func _begin_placement(tower_id: String) -> void:
 func _cancel_placement() -> void:
 	placing_tower = false
 	print("[godot] 已取消放置")
+
+
+func _muzzle_flash_at(pos: Vector2) -> void:
+	if lighting != null:
+		lighting.muzzle_flash(pos)
 
 
 func _confirm_placement() -> void:
@@ -1614,7 +1626,9 @@ var hud_situation: Label = null
 var hud_res: Label = null
 var hud_dist: Label = null
 var hud_hotbar: Array = []
-var run_time := 0.0          # 本局已玩秒数（昼夜按 240 秒一天，与 JS 一致）
+var run_time := 0.0
+## 昼夜光照（CanvasModulate + 点光源）—— Godot 相对 Canvas 的强项
+var lighting: Lighting = null          # 本局已玩秒数（昼夜按 240 秒一天，与 JS 一致）
 var hud_boss: ProgressBar = null
 var hud_boss_label: Label = null
 
@@ -1768,6 +1782,15 @@ func _update_hud() -> void:
 				# 用 .get() 兜底：字典少一个键不该把整段 HUD 更新打断
 				float((towers.bases[0] as Dictionary).get("hp", 0.0)) if not towers.bases.is_empty() else 0.0,
 				float((towers.bases[0] as Dictionary).get("maxHp", 1.0)) if not towers.bases.is_empty() else 1.0)]
+	if lighting != null:
+		var b0: Dictionary = towers.bases[0] if not towers.bases.is_empty() else {}
+		lighting.update(1.0 / 60.0, run_time, player.position,
+			Vector2(float(b0.get("x", 0.0)), float(b0.get("y", 0.0))),
+			not towers.bases.is_empty(),
+			_tick_repair_hint_under_attack(b0),
+			GdMath.truthy(b0.get("destroyed", false)),
+			player_stats.stat("sightBonus"), world.planet_index)
+
 	if hud_res != null:
 		hud_res.text = HudModel.resource_bar(props_layer.resources)
 	if hud_dist != null:
@@ -2359,3 +2382,14 @@ func _nearest_nest_distance() -> float:
 			continue
 		best = minf(best, player.position.distance_to(Vector2(float(n["x"]), float(n["y"]))))
 	return best
+
+## 基地是否正被围攻（光照警戒边框用）
+func _tick_repair_hint_under_attack(b0: Dictionary) -> bool:
+	if b0.is_empty():
+		return false
+	for e in enemies.enemies:
+		if GdMath.truthy(e.get("dead", false)):
+			continue
+		if GdMath.dist(float(e["x"]), float(e["y"]), float(b0.get("x", 0.0)), float(b0.get("y", 0.0))) < 160.0:
+			return true
+	return false
