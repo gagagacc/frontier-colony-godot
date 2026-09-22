@@ -10,15 +10,16 @@
  *       node tools/godot-verify.mjs          （生成 + 跑 Godot + 比对）
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { GODOT_PROJECT, GOLDEN_PATH, findGodotBinary, jsModule } from './paths.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RNG } from '../src/core/rng.js';
-import { ValueNoise, CellNoise } from '../src/core/noise.js';
-import { hashStr } from '../src/core/math.js';
-import { WORLD_PX } from '../src/core/config.js';
+const { RNG } = await jsModule('core/rng.js');
+const { ValueNoise, CellNoise } = await jsModule('core/noise.js');
+const { hashStr } = await jsModule('core/math.js');
+const { WORLD_PX } = await jsModule('core/config.js');
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = join(ROOT, 'godot', 'tests');
+const OUT = join(GODOT_PROJECT, 'tests');
 mkdirSync(OUT, { recursive: true });
 
 /** 浮点统一截断到 12 位小数，避免两侧打印精度差异造成假失败 */
@@ -98,7 +99,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 世界生成（分阶段哈希 + 关键对象）----
 {
-  const { World } = await import('../src/world/world.js');
+  const { World } = await jsModule('world/world.js');
 
   /** 与 GDScript 侧同一套哈希：FNV-1a 依次吃 tiles / biomes */
   const hashArrays = (w) => {
@@ -161,7 +162,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 查询 API：碰撞 / 通行速度 / 找空地 ----
 {
-  const { World } = await import('../src/world/world.js');
+  const { World } = await jsModule('world/world.js');
   const w = new World('frontier-golden-a', {});
 
   // 采样点：世界中心附近 + 基地 + 一些固定偏移（覆盖陆地/水/岩壁/边界外）
@@ -191,7 +192,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 流场寻路 ----
 {
-  const { World } = await import('../src/world/world.js');
+  const { World } = await jsModule('world/world.js');
   const w = new World('frontier-golden-a', {});
 
   /** 与 GDScript 侧同一套取样：目标 = 基地所在格 */
@@ -263,7 +264,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 空间哈希 ----
 {
-  const { SpatialHash } = await import('../src/world/spatialHash.js');
+  const { SpatialHash } = await jsModule('world/spatialHash.js');
   const hash = new SpatialHash(84);
   // 确定性实体表（不依赖世界生成，纯几何）
   const ents = [];
@@ -292,8 +293,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 逐轴移动 / 贴墙滑行 ----
 {
-  const { World } = await import('../src/world/world.js');
-  const { TILE } = await import('../src/core/config.js');
+  const { World } = await jsModule('world/world.js');
+  const { TILE } = await jsModule('core/config.js');
   const w = new World('frontier-golden-a', {});
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -344,8 +345,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 崖边（「看得见的崖边」）描边遮罩 ----
 {
-  const { World } = await import('../src/world/world.js');
-  const { isSolidTile } = await import('../src/data/tiles.js');
+  const { World } = await jsModule('world/world.js');
+  const { isSolidTile } = await jsModule('data/tiles.js');
   const w = new World('frontier-golden-a', {});
 
   /**
@@ -379,10 +380,10 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 属性聚合（StatSet + foldEffects + 等级缩放）----
 {
-  const { StatSet, foldEffects, DEFAULT_STATS } = await import('../src/systems/stats.js');
-  const { TECH_DEF } = await import('../src/data/tech.js');
-  const { EXPERIMENTS } = await import('../src/data/experiments.js');
-  const { CHAR_DEF } = await import('../src/data/characters.js');
+  const { StatSet, foldEffects, DEFAULT_STATS } = await jsModule('systems/stats.js');
+  const { TECH_DEF } = await jsModule('data/tech.js');
+  const { EXPERIMENTS } = await jsModule('data/experiments.js');
+  const { CHAR_DEF } = await jsModule('data/characters.js');
 
   /** 与 runState 里同名的等级缩放（那份是模块私有的，这里复刻同一段逻辑） */
   const MULT_KEYS = new Set(['damage', 'attackSpeed', 'speedMult', 'goldMult', 'xpMult', 'matMult',
@@ -489,9 +490,9 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 武器数值上限 / 换弹 / 弹药整数化 ----
 {
-  const { StatSet } = await import('../src/systems/stats.js');
-  const { WEAPON_DEF, RARITY_RELOAD, reloadTimeOf } = await import('../src/data/weapons.js');
-  const { WEAPON_CAPS } = await import('../src/core/config.js');
+  const { StatSet } = await jsModule('systems/stats.js');
+  const { WEAPON_DEF, RARITY_RELOAD, reloadTimeOf } = await jsModule('data/weapons.js');
+  const { WEAPON_CAPS } = await jsModule('core/config.js');
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
   /** JS player.weaponStat 的纯函数复刻 */
@@ -554,10 +555,10 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 怪物缩放 / 建怪字段 / 伤害与护甲 ----
 {
-  const { enemyScaleFor, createEnemy } = await import('../src/systems/runState.js');
-  const { MonsterSystem } = await import('../src/systems/enemies.js');
-  const { MONSTER_DEF } = await import('../src/data/monsters.js');
-  const { RNG } = await import('../src/core/rng.js');
+  const { enemyScaleFor, createEnemy } = await jsModule('systems/runState.js');
+  const { MonsterSystem } = await jsModule('systems/enemies.js');
+  const { MONSTER_DEF } = await jsModule('data/monsters.js');
+  const { RNG } = await jsModule('core/rng.js');
 
   // 极简 run 替身：createEnemy 只用到 planetIndex / rng / player / base
   const mkRun = (planetIndex, seed) => ({
@@ -637,12 +638,12 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 防御塔：数值 / 放置规则（含基座免间隔）----
 {
-  const towersMod = await import('../src/data/towers.js');
+  const towersMod = await jsModule('data/towers.js');
   const { TOWER_DEF: TDEF, STRUCTURE_DEF: SDEF, STRUCTURE } = towersMod;
-  const { StatSet } = await import('../src/systems/stats.js');
-  const { World } = await import('../src/world/world.js');
-  const { TILE } = await import('../src/core/config.js');
-  const { scaleCost } = await import('../src/systems/towers.js');
+  const { StatSet } = await jsModule('systems/stats.js');
+  const { World } = await jsModule('world/world.js');
+  const { TILE } = await jsModule('core/config.js');
+  const { scaleCost } = await jsModule('systems/towers.js');
 
   const w = new World('frontier-golden-a', {});
   const bx = w.baseSite.x, by = w.baseSite.y;
@@ -748,11 +749,11 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 波次导演：预算 / 组成 / 刷怪点四档规则 ----
 {
-  const { Director } = await import('../src/systems/director.js');
-  const { World } = await import('../src/world/world.js');
-  const { StatSet } = await import('../src/systems/stats.js');
-  const { RNG, rnd } = await import('../src/core/rng.js');
-  const { BEACON } = await import('../src/core/config.js');
+  const { Director } = await jsModule('systems/director.js');
+  const { World } = await jsModule('world/world.js');
+  const { StatSet } = await jsModule('systems/stats.js');
+  const { RNG, rnd } = await jsModule('core/rng.js');
+  const { BEACON } = await jsModule('core/config.js');
 
   // `rnd` 是全局非确定性随机（Math.random）—— 导演里用它选怪/选巢。
   // 要跨语言比对就必须把它换成确定性流：这里用一个 RNG 顶上，
@@ -866,9 +867,9 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 
 // ---- 虫巢副本：规划 / 挖掘结果 / 房间与通道 ----
 {
-  const { dungeonPlan, carveDungeon } = await import('../src/world/dungeon.js');
-  const { World } = await import('../src/world/world.js');
-  const { T } = await import('../src/data/tiles.js');
+  const { dungeonPlan, carveDungeon } = await jsModule('world/dungeon.js');
+  const { World } = await jsModule('world/world.js');
+  const { T } = await jsModule('data/tiles.js');
   const hashOne = (arr) => {
     let h = 2166136261 >>> 0;
     for (let i = 0; i < arr.length; i++) h = Math.imul(h ^ arr[i], 16777619) >>> 0;
@@ -917,12 +918,12 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 科技树 / 实验科技 / 装备 ----
 {
-  const { RunState } = await import('../src/systems/runState.js');
-  const { TECH_DEF, TECH_MAP } = await import('../src/data/tech.js');
-  const { EXPERIMENTS, poolFor, DIR, EXP_MAP } = await import('../src/data/experiments.js');
-  const { scoreItem, itemWeight } = await import('../src/systems/loot.js');
-  const { RNG } = await import('../src/core/rng.js');
-  const { TOWER_DEF } = await import('../src/data/towers.js');
+  const { RunState } = await jsModule('systems/runState.js');
+  const { TECH_DEF, TECH_MAP } = await jsModule('data/tech.js');
+  const { EXPERIMENTS, poolFor, DIR, EXP_MAP } = await jsModule('data/experiments.js');
+  const { scoreItem, itemWeight } = await jsModule('systems/loot.js');
+  const { RNG } = await jsModule('core/rng.js');
+  const { TOWER_DEF } = await jsModule('data/towers.js');
 
   // 1) 科技解锁：给定资源与初始已解锁集合，逐个问「能不能解锁」+ 解锁后的状态
   const mkRun = () => {
@@ -1022,7 +1023,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
     StatusMath: null, BossAbilities: null,
   }));
   void StatusMath; void BossAbilities;
-  const { RNG } = await import('../src/core/rng.js');
+  const { RNG } = await jsModule('core/rng.js');
 
   // 1) 技能组参数（与 spawnDungeonBoss 一致）
   const abilityCases = [];
@@ -1136,7 +1137,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 死亡与复活 ----
 {
-  const { RunState } = await import('../src/systems/runState.js');
+  const { RunState } = await jsModule('systems/runState.js');
   const cases = [];
   for (const [gold, immunity, baseDestroyed] of [[260, 0, false], [1000, 0, false], [400, 1, false], [260, 0, true]]) {
     // RunState 本身不带 playerSystem（那是 installRun 时装配的），
@@ -1162,8 +1163,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 背包排序（UI 里唯一有真实逻辑的部分）----
 {
-  const { scoreItem, itemWeight } = await import('../src/systems/loot.js');
-  const { RARITY_ORDER } = await import('../src/data/weapons.js');
+  const { scoreItem, itemWeight } = await jsModule('systems/loot.js');
+  const { RARITY_ORDER } = await jsModule('data/weapons.js');
   const SLOT_ORDER = ['weapon', 'helmet', 'chest', 'legs', 'trinket', 'misc'];
   const rank = (it) => RARITY_ORDER.indexOf(it.rarity);
   const sortBag = (items, mode) => {
@@ -1204,8 +1205,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 可采集物：区块惰性生成 / 类型分布 / 采集产出 ----
 {
-  const { World } = await import('../src/world/world.js');
-  const { PROP_DEF } = await import('../src/data/tiles.js');
+  const { World } = await jsModule('world/world.js');
+  const { PROP_DEF } = await jsModule('data/tiles.js');
   const w = new World('props-golden', { nestScale: 0.3, poiScale: 0.3 });
 
   // 生成一片区块，统计类型分布（验证 _pickPropType 的池与稀有度）
@@ -1259,8 +1260,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 载具 ----
 {
-  const { VEHICLE } = await import('../src/core/config.js');
-  const { StatSet } = await import('../src/systems/stats.js');
+  const { VEHICLE } = await jsModule('core/config.js');
+  const { StatSet } = await jsModule('systems/stats.js');
   const cases = [];
   for (const [name, mods] of [
     ['stock', {}],
@@ -1306,8 +1307,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 城镇：人口增长 / 档位 / 解锁累积 / 生产 ----
 {
-  const { POP_TIERS, TOWN_BUILDING_DEF } = await import('../src/data/planets.js');
-  const { StatSet } = await import('../src/systems/stats.js');
+  const { POP_TIERS, TOWN_BUILDING_DEF } = await jsModule('data/planets.js');
+  const { StatSet } = await jsModule('systems/stats.js');
 
   // 每个档位的门槛与解锁（逐项）
   const tiers = POP_TIERS.map(t => ({ pop: t.pop, name: t.name, unlock: t.unlock }));
@@ -1335,7 +1336,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
   // ⚠️ 这里原本是我手写复刻的循环，结果和 town.js 的真实实现不一致
   //（真实实现断粮时会 `return`，我手写的那版没有）—— 黄金值于是记录了一个
   // 「游戏里根本不会发生」的行为。教训同前：**脚手架必须调用实现本身**。
-  const { TownSystem } = await import('../src/systems/town.js');
+  const { TownSystem } = await jsModule('systems/town.js');
   const growthCases = [];
   for (const [buildings, food, planetIndex] of [
     [['hab'], 0, 0],
@@ -1382,7 +1383,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 制造（交易/装备产出）----
 {
-  const { CRAFT_TIERS, CRAFT_WEAPONS, CRAFT_ARMOR, craftCost, canCraftRarity, craftTier, craftLevelFor } = await import('../src/data/crafting.js');
+  const { CRAFT_TIERS, CRAFT_WEAPONS, CRAFT_ARMOR, craftCost, canCraftRarity, craftTier, craftLevelFor } = await jsModule('data/crafting.js');
   const tiers = CRAFT_TIERS.map(t => ({ id: t.id, name: t.name, rarity: t.rarity, pop: t.pop, costMult: t.costMult }));
   // 每个制造等级下能造什么品质
   const rarityCases = [];
@@ -1450,7 +1451,7 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 模式系统（开拓 / 纯塔防）----
 {
-  const { MODE_DEF, MODE_LIST } = await import('../src/data/modes.js');
+  const { MODE_DEF, MODE_LIST } = await jsModule('data/modes.js');
   const modes = MODE_LIST.map(id => {
     const d = MODE_DEF[id];
     return {
@@ -1496,8 +1497,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 四角色 × 三星球矩阵 ----
 {
-  const { CHAR_DEF, CHAR_LIST } = await import('../src/data/characters.js');
-  const { World } = await import('../src/world/world.js');
+  const { CHAR_DEF, CHAR_LIST } = await jsModule('data/characters.js');
+  const { World } = await jsModule('world/world.js');
   const cases = [];
   for (const cid of CHAR_LIST) {
     const def = CHAR_DEF[cid];
@@ -1526,8 +1527,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 手感回归：移动/冲刺/闪避的逐帧轨迹 ----
 {
-  const { PLAYER } = await import('../src/core/config.js');
-  const { StatSet } = await import('../src/systems/stats.js');
+  const { PLAYER } = await jsModule('core/config.js');
+  const { StatSet } = await jsModule('systems/stats.js');
   // 与 player.js 的 updateMove 同式（速度 = base × (1+speedMult) × 冲刺 × 狂暴 × 负重 × 地形）
   const speedFor = (stats, sprinting, terrain, frenzy, carryUsed, carryMax) => {
     let speed = PLAYER.baseSpeed * (1 + stats.get('speedMult'));
@@ -1585,8 +1586,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 射击几何（手感回归第二刀）----
 {
-  const { WEAPON_DEF } = await import('../src/data/weapons.js');
-  const { StatSet } = await import('../src/systems/stats.js');
+  const { WEAPON_DEF } = await jsModule('data/weapons.js');
+  const { StatSet } = await jsModule('systems/stats.js');
   const shots = [];
   // 三种武器 × 三种弹道条数：比对「射击计划」的结构（散布取 0，把随机性拿掉）
   for (const wid of ['pistol', 'smg', 'shotgun']) {
@@ -1661,8 +1662,8 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
 }
 // ---- 维修 / 重建（手感回归第五刀）----
 {
-  const { BASE } = await import('../src/core/config.js');
-  const { StatSet } = await import('../src/systems/stats.js');
+  const { BASE } = await jsModule('core/config.js');
+  const { StatSet } = await jsModule('systems/stats.js');
   // ① 维修：速率 30/s、花费 0.28/点（再乘两个倍率）
   const repairCases = [];
   for (const [dt, hp, maxHp, metal, mods] of [

@@ -12,6 +12,7 @@
  * exe 与 pck 是否都在，并打印体积。
  */
 import { execFileSync } from 'node:child_process';
+import { GODOT_PROJECT, GOLDEN_PATH, findGodotBinary } from './paths.mjs';
 import { existsSync, mkdirSync, readdirSync, statSync, rmSync, copyFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,7 +68,7 @@ mkdirSync(OUT_DIR, { recursive: true });
 log(`▶ 导出 ${DEBUG_BUILD ? 'debug' : 'release'} …`);
 // 注意下标：--path 后面跟的是工程路径，模式开关不能写到那个位置
 const mode = DEBUG_BUILD ? '--export-debug' : '--export-release';
-const args = ['--headless', '--path', join(ROOT, 'godot'), mode, PRESET];
+const args = ['--headless', '--path', GODOT_PROJECT, mode, PRESET];
 execFileSync(GODOT, args, { stdio: 'inherit', cwd: ROOT });
 
 // 2.5) 带 Steam 模块的模板：运行时文件也要一起放进产物目录
@@ -76,7 +77,7 @@ execFileSync(GODOT, args, { stdio: 'inherit', cwd: ROOT });
 // godotsteam.441.template.windows64.exe，**运行时还需要同目录的 steam_api64.dll**，
 // 开发期还要 steam_appid.txt（480 = Steamworks 的 Spacewar 测试 AppID）。
 // 少了这两个文件，导出照样成功，但一启动就报「Steam API 初始化失败」。
-const steamDll = join(ROOT, 'godot', 'addons', 'godotsteam', 'steam_api64.dll');
+const steamDll = join(GODOT_PROJECT, 'addons', 'godotsteam', 'steam_api64.dll');
 if (existsSync(steamDll)) {
   // 目标可能被上一次运行的游戏进程占用（EBUSY）—— 那是「文件已经是对的了」，
   // 不该让整个导出失败，警告一下继续。

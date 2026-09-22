@@ -5,6 +5,7 @@
  * 退出码非 0 = 移植代码与 JS 版出现数值分歧（或 Godot 侧报错）。
  */
 import { existsSync } from 'node:fs';
+import { GODOT_PROJECT, GOLDEN_PATH, findGodotBinary } from './paths.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -13,7 +14,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GODOT_CANDIDATES = [
   join(ROOT, 'tools', 'godot-dl', 'exe', 'Godot_v4.4.1-stable_win64_console.exe'),
   join(ROOT, 'tools', 'godot-dl', 'exe', 'Godot_v4.4.1-stable_win64.exe'),
-  'godot',
+  '.',
 ];
 
 const godot = GODOT_CANDIDATES.find(p => p === 'godot' || existsSync(p));
@@ -29,9 +30,9 @@ console.log('▶ 跑 Godot headless 测试…');
 let out = '';
 try {
   out = execFileSync(godot, [
-    '--headless', '--path', join(ROOT, 'godot'),
+    '--headless', '--path', GODOT_PROJECT,
     '--script', 'res://tests/run_tests.gd',
-    '--', `--golden=${join(ROOT, 'godot', 'tests', 'golden.json')}`,
+    '--', `--golden=${GOLDEN_PATH}`,
   ], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 } catch (err) {
   out = `${err.stdout || ''}${err.stderr || ''}`;
@@ -57,7 +58,7 @@ if (res.fail) {
 let simOut = '';
 try {
   simOut = execFileSync(godot, [
-    '--headless', '--path', join(ROOT, 'godot'),
+    '--headless', '--path', GODOT_PROJECT,
     '--script', 'res://tests/sim_long.gd', '--', '--seconds=120',
   ], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 600000 });
 } catch (err) {

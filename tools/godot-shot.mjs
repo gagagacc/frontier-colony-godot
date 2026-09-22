@@ -8,6 +8,7 @@
  * 用法：node tools/godot-shot.mjs --out tools/shots/godot-game.png [--seed xxx] [--frames 90] [--move 1,0]
  */
 import { existsSync, mkdirSync } from 'node:fs';
+import { GODOT_PROJECT, GOLDEN_PATH, findGodotBinary } from './paths.mjs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -42,7 +43,7 @@ const GODOT = [
 if (!GODOT) { console.error('找不到 Godot'); process.exit(1); }
 
 mkdirSync(dirname(OUT), { recursive: true });
-const args = ['--path', join(ROOT, 'godot'), '--resolution', '1280x720', '--'];
+const args = ['--path', GODOT_PROJECT, '--resolution', '1280x720', '--'];
 args.push(`--shot=${OUT}`, `--frames=${FRAMES}`, `--seed=${SEED}`);
 if (MOVE) args.push(`--move=${MOVE}`);
 if (FIRE) args.push(`--fire=${FIRE}`);

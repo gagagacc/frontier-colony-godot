@@ -13,12 +13,13 @@
  * 对应 Godot 的 tower/damage/enemy/ammo 四组），这层判断不该由脚本猜。
  */
 import { execFileSync } from 'node:child_process';
+import { GODOT_PROJECT, GOLDEN_PATH, findGodotBinary } from './paths.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GODOT = join(ROOT, 'tools', 'godot-dl', 'exe', 'Godot_v4.4.1-stable_win64_console.exe');
-const GOLDEN = join(ROOT, 'godot', 'tests', 'golden.json');
+const GOLDEN = GOLDEN_PATH;
 
 /** JS 分组（关键字匹配）→ Godot 断言名前缀；status 见下方说明 */
 const MAP = [
@@ -75,7 +76,7 @@ function runJS() {
 
 function runGodot() {
   try {
-    const out = execFileSync(GODOT, ['--headless', '--path', join(ROOT, 'godot'),
+    const out = execFileSync(GODOT, ['--headless', '--path', GODOT_PROJECT,
       '--script', 'res://tests/run_tests.gd', '--', `--golden=${GOLDEN}`],
       { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: ROOT, timeout: 600000 });
     return parseGodot(out);
