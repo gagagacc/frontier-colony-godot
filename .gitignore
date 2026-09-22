@@ -1,1 +1,16 @@
-# 占位
+# 引擎与模板（几百 MB，从官网重下即可）
+.godot/
+addons/godotsteam/*.exe
+tools/godot-dl/
+*.tpz
+
+# 导出产物（走 Releases 下载，不进仓库）
+dist-godot/
+build/
+
+# 本地临时
+tools/_*.mjs
+*.log
+*.bak
+.DS_Store
+Thumbs.db
