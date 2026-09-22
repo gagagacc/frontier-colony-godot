@@ -117,6 +117,9 @@ func _update_flow(_dt: float) -> void:
 
 
 func _update_enemy(e: Dictionary, dt: float) -> void:
+	# 每帧重新选目标（照 JS：谁近打谁，玩家在阵列里则建筑优先）
+	if not GdMath.truthy(e.get("boss", false)):
+		_acquire_target(e)
 	var def: Dictionary = e["def"]
 	if float(e.get("hitFlash", 0.0)) > 0.0:
 		e["hitFlash"] = maxf(0.0, float(e["hitFlash"]) - dt * 4.0)
@@ -255,6 +258,62 @@ func _separate(dt: float) -> void:
 			b["y"] = float(b["y"]) + ny * push * dt * 6.0
 
 
+## 索敌 —— 规则照抄 JS `enemies.js` 的那一段：
+##   1) 玩家在吸引阵列范围内 → **基地/建筑优先**（哪怕玩家更近）；
+##   2) 否则谁近打谁（玩家 / 最近的塔 / 建筑 / 基地）；
+##   3) 都不在视野内 → 没有目标。
+func _acquire_target(e: Dictionary) -> void:
+	var best: Dictionary = {}
+	var best_d := INF
+	if towers_ref2 != null:
+		for t in (towers_ref2.towers as Array):
+			if GdMath.truthy(t.get("destroyed", false)) or float(t.get("hp", 1.0)) <= 0.0:
+				continue
+			var dd := GdMath.dist(float(e["x"]), float(e["y"]), float(t["x"]), float(t["y"]))
+			if dd < best_d:
+				best_d = dd
+				best = t
+				best["__kind"] = "tower"
+		for s in (towers_ref2.structures as Array):
+			if GdMath.truthy(s.get("destroyed", false)) or float(s.get("hp", 1.0)) <= 0.0:
+				continue
+			var dd2 := GdMath.dist(float(e["x"]), float(e["y"]), float(s["x"]), float(s["y"]))
+			if dd2 < best_d:
+				best_d = dd2
+				best = s
+				best["__kind"] = "structure"
+		for b in (towers_ref2.bases as Array):
+			if GdMath.truthy(b.get("destroyed", false)):
+				continue
+			var dd3 := GdMath.dist(float(e["x"]), float(e["y"]), float(b["x"]), float(b["y"]))
+			if dd3 < best_d:
+				best_d = dd3
+				best = b
+				best["__kind"] = "base"
+	var dp := GdMath.dist(float(e["x"]), float(e["y"]), player.position.x, player.position.y)
+	var in_field := false
+	if director_ref != null:
+		in_field = dp <= float(director_ref.beacon_radius_for(director_ref.beacon_level))
+	var sight := float(e["def"].get("sight", 900.0))
+	if in_field and not best.is_empty() and best_d < sight:
+		e["target"] = best
+		e["targetKind"] = String(best["__kind"])
+		e["targetPlayer"] = false
+		return
+	if dp < best_d and dp < sight:
+		e["targetPlayer"] = true
+		e["targetKind"] = "player"
+		return
+	if not best.is_empty():
+		e["target"] = best
+		e["targetKind"] = String(best["__kind"])
+		e["targetPlayer"] = false
+		return
+	e["target"] = {}
+	e["targetKind"] = ""
+	e["targetPlayer"] = dp < sight * 0.9
+
+
 func _attack(e: Dictionary, def: Dictionary, d: float, want_range: float) -> void:
 	if GdMath.truthy(def.get("ranged", false)) and projectiles != null:
 		var rd: Dictionary = def.get("ranged", {})
@@ -264,8 +323,27 @@ func _attack(e: Dictionary, def: Dictionary, d: float, want_range: float) -> voi
 			float(e["y"]) + sin(a) * (float(e["r"]) + 4.0), a, speed,
 			float(e["dmg"]), { "friendly": false, "r": float(rd.get("r", 8.0)), "color": Color("#b080ff") })
 		return
-	if d <= want_range + float(e["r"]) + MELEE_REACH_PAD and player.has_method("take_damage"):
-		player.take_damage(float(e["dmg"]), String(def.get("name", "怪物")))
+	if d > want_range + float(e["r"]) + MELEE_REACH_PAD:
+		return
+	# JS 的 attackTarget：玩家 / 塔 / 建筑 / 基地四选一（之前这里只打玩家，
+	# 所以「基地被摧毁 → 追杀」「塔被打掉」两条主循环在 Godot 版走不到）
+	var raw_target = e.get("target", null)
+	var target: Dictionary = raw_target if raw_target is Dictionary else {}
+	if GdMath.truthy(e.get("targetPlayer", false)) or target.is_empty():
+		if player.has_method("take_damage"):
+			player.take_damage(float(e["dmg"]), String(def.get("name", "怪物")))
+		return
+	var kind := String(e.get("targetKind", "base"))
+	if kind == "base":
+		var base_def: Dictionary = DataLoader.new().table("config", "BASE", {})
+		var res: Dictionary = StructureDamage.hit_base(target, float(e["dmg"]), base_def)
+		if GdMath.truthy(res["justDestroyed"]):
+			var what := StructureDamage.on_base_destroyed(director_ref, town_ref, base_def)
+			print("[godot] 核心舱被摧毁 —— %s" % what)
+	else:
+		if StructureDamage.hit_building(target, float(e["dmg"]), world.rng):
+			print("[godot] %s 被摧毁" % String(target.get("type", "建筑")))
+			_on_building_destroyed(target)
 
 
 func _on_killed(e: Dictionary) -> void:
@@ -521,9 +599,25 @@ var towers_ref: Array = []
 ## 震屏：接到相机的 CameraRig 上（以前这里是空函数，于是挨打/Boss 冲撞/基地被砸
 ## 在 Godot 版里一点反馈都没有）
 var cam_rig_ref: CameraRig = null
+## 基地被摧毁时要联动的东西（由 Game 接进来）
+var town_ref: Town = null
+## 波次导演（基地被摧毁时要切追杀；索敌要问阵列半径）
+var director_ref: Director = null
+## 建筑/塔的宿主（用来从列表里摘掉被摧毁的）
+var towers_ref2: Node2D = null   # Towers 节点
 
 
 func bus_shake(mag: float, time: float = CameraRig.DEFAULT_SHAKE_TIME) -> void:
 	if cam_rig_ref != null:
 		cam_rig_ref.shake(mag, time)
 
+
+
+## 建筑/塔被打掉：从宿主列表里摘掉（渲染层自然就不画了）
+func _on_building_destroyed(target: Dictionary) -> void:
+	if towers_ref2 == null:
+		return
+	if towers_ref2.get("towers") != null:
+		(towers_ref2.towers as Array).erase(target)
+	if towers_ref2.get("structures") != null:
+		(towers_ref2.structures as Array).erase(target)

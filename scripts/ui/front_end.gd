@@ -11,9 +11,11 @@
 ## 对外只有三个回调：`on_start(params)` / `on_quit()` / `on_open_settings()`。
 class_name FrontEnd
 
-enum Screen { TITLE, MODE, CHARACTER, PLANET, LOADING, SETTINGS }
+enum Screen { TITLE, MODE, CHARACTER, PLANET, LOADING, SETTINGS, LANDING }
 
 signal start_requested(params: Dictionary)
+## 选好降落点后发出（带选中的 site 字典）
+signal landing_confirmed(site: Dictionary)
 signal quit_requested
 
 var screen: int = Screen.TITLE
@@ -24,6 +26,9 @@ var planet_index := 0
 var root: Control = null
 var _loading_msg := "正在生成世界…"
 var _loading_detail := ""
+## 选降落点用：世界已经生成好了，这里只是拿它的 landing_sites
+var landing_world: GdWorld = null
+var landing_map: LandingMap = null
 
 
 func _init() -> void:
@@ -91,6 +96,8 @@ func rebuild() -> void:
 			_build_loading(box)
 		Screen.SETTINGS:
 			_build_settings(box)
+		Screen.LANDING:
+			_build_landing(box)
 
 
 func _title(text: String, size: int = 34) -> Label:
@@ -438,3 +445,100 @@ func _build_settings(box: Node) -> void:
 			rebuild(), Vector2(220, 36))]))
 	box.add_child(_spacer(16))
 	box.add_child(_row([_btn("← 返回", func() -> void: goto(Screen.TITLE), Vector2(160, 36))]))
+
+
+# ---------- 选降落点（对应 HTML 版的整屏地图交互）----------
+func show_landing(world: GdWorld) -> void:
+	landing_world = world
+	landing_map = LandingMap.new()
+	landing_map.setup(world)
+	goto(Screen.LANDING)
+
+
+func _build_landing(box: Node) -> void:
+	box.add_child(_title("选择降落点", 32))
+	box.add_child(_sub("在地图上点一下就能把核心舱降在那里（绿圈 = 推荐点，红点 = 虫巢，黄方块 = 废弃基地）。"))
+	box.add_child(_spacer(8))
+	if landing_map == null or landing_world == null:
+		box.add_child(_sub("（世界还没生成）"))
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	# 左：地图（可点）
+	var map := Control.new()
+	map.custom_minimum_size = Vector2(560, 560)
+	var mm := landing_map
+	map.draw.connect(func() -> void:
+		mm.draw_map(map, Vector2.ZERO, Vector2(560, 560)))
+	map.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed \
+			and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			var mp := (ev as InputEventMouseButton).position
+			var wp := mm.map_to_world(mp, Vector2(560, 560))
+			# 就近吸附到推荐点（30 格内），否则就用点的位置
+			var best := -1
+			var best_d := 30.0 * float(Cfg.TILE)
+			for i in mm.sites.size():
+				var s: Dictionary = mm.sites[i]
+				var d := Vector2(float(s["x"]), float(s["y"])).distance_to(wp)
+				if d < best_d:
+					best_d = d
+					best = i
+			if best >= 0:
+				mm.selected = best
+			else:
+				picked_free = wp
+			mm.hover = wp
+			map.queue_redraw()
+			rebuild())
+	row.add_child(map)
+	# 右：信息 + 推荐点 + 按钮
+	var side := VBoxContainer.new()
+	side.custom_minimum_size = Vector2(420, 0)
+	side.add_theme_constant_override("separation", 8)
+	var sel := _selected_site()
+	side.add_child(_sub("坐标  %d, %d" % [int(float(sel.get("x", 0.0)) / float(Cfg.TILE)),
+		int(float(sel.get("y", 0.0)) / float(Cfg.TILE))]))
+	side.add_child(_sub("生物群系  %s" % String(sel.get("biomeName", "—"))))
+	side.add_child(_sub("危险度  %s" % String(sel.get("tierName", "—"))))
+	side.add_child(_sub("1000 内虫巢  %d" % int(sel.get("nestNear", 0))))
+	side.add_child(_sub("资源丰度  ×%.2f" % float(sel.get("richness", 1.0))))
+	side.add_child(_sub("地形危险  ×%.2f" % float(sel.get("hazard", 1.0))))
+	side.add_child(_sub("开阔度  %d%%" % int(round(float(sel.get("openSpace", 0.0)) * 100.0))))
+	side.add_child(_spacer(10))
+	side.add_child(_sub("✓ 可以在这里降落" if not _site_blocked(sel) else "✗ 这里落不下去（地形太挤）"))
+	side.add_child(_spacer(6))
+	for i in landing_map.sites.size():
+		var s2: Dictionary = landing_map.sites[i]
+		var b := _option_button("%d. %s · %s" % [i + 1, String(s2.get("tierName", "")),
+			String(s2.get("biomeName", ""))], i == landing_map.selected, Color("#6ee7a8"),
+			func() -> void:
+				landing_map.selected = i
+				picked_free = Vector2(-1, -1)
+				rebuild(), Vector2(400, 30))
+		side.add_child(b)
+	row.add_child(side)
+	box.add_child(row)
+	_footer(box, Screen.PLANET, "降落", func() -> void:
+		landing_confirmed.emit(_selected_site()))
+
+
+## 玩家在地图上自由点选的位置（没有吸附到推荐点时用）
+var picked_free := Vector2(-1, -1)
+
+
+func _selected_site() -> Dictionary:
+	if landing_map == null or landing_map.sites.is_empty():
+		return {}
+	if picked_free.x >= 0.0:
+		var s: Dictionary = (landing_map.sites[landing_map.selected] as Dictionary).duplicate()
+		s["x"] = picked_free.x
+		s["y"] = picked_free.y
+		return s
+	return landing_map.sites[landing_map.selected]
+
+
+func _site_blocked(site: Dictionary) -> bool:
+	if landing_world == null:
+		return true
+	return landing_world.circle_blocked(float(site.get("x", 0.0)), float(site.get("y", 0.0)), 40.0)

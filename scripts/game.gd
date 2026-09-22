@@ -73,6 +73,8 @@ var auto_panel := -1
 var auto_menu := 1
 ## 自动截图：直接跳到前置界面的某一屏（0 标题 1 模式 2 角色 3 星球 5 设置）
 var auto_flow := -1
+## 截图用：生成世界后直接停在「选降落点」那一屏
+var auto_landing := 0
 ## 自动截图：跑一遍存/读档往返（阶段 12 的实机验证）
 var auto_saveload := 0
 ## 阶段 11：暂停 + 面板（Control 节点替代 DOM）
@@ -122,6 +124,8 @@ func _parse_cli() -> void:
 			show_menu = auto_menu == 1
 		elif a.begins_with("--flow="):
 			auto_flow = a.substr(7).to_int()
+		elif a.begins_with("--landing="):
+			auto_landing = a.substr(10).to_int()
 	if seed_text == "" or seed_text == "frontier-golden-a":
 		if shot_path == "":
 			seed_text = "frontier-%d" % (Time.get_ticks_msec() % 100000)
@@ -143,7 +147,11 @@ func _ready() -> void:
 	# 前置流程：标题 → 模式 → 角色 → 星球 → 生成 → 落地。
 	# **在这之前不生成世界、不推进模拟** —— 以前是先开局再把菜单盖上去，
 	# 结果玩家还在选角色，虫群已经在打基地了。
-	if auto_menu == 1:
+	# --landing=1 是截图/联调用的：照常走前置界面，但**自动开局到「选降落点」那一屏**
+	if auto_landing == 1:
+		_show_front_end()
+		_start_run(DefaultStart.params())
+	elif auto_menu == 1:
 		_show_front_end()
 	else:
 		_start_run(DefaultStart.params())
@@ -155,7 +163,10 @@ func _ready() -> void:
 ## 再开始算 —— 明确等待比卡住强。参数全部来自前置界面（或 `--menu=0` 的默认值）。
 func _start_run(params: Dictionary) -> void:
 	start_params_static = params
-	seed_text = String(params.get("seed", seed_text))
+	# ⚠️ 空字符串**不能**覆盖已有的种子（DefaultStart 给的就是 ""，会把 CLI 的种子冲掉）
+	var seed_arg := String(params.get("seed", ""))
+	if seed_arg != "":
+		seed_text = seed_arg
 	planet_index = int(params.get("planetIndex", 0))
 	if front_end != null:
 		front_end.show_loading("星球 %d · 种子 %s · 模式 %s" % [
@@ -174,6 +185,27 @@ func _start_run(params: Dictionary) -> void:
 	atlas.build(DataLoader.new().table("tiles", "TILE_DEF", {}))
 	atlas_ms = Time.get_ticks_msec() - t1
 
+	# 世界已经生成 → 让玩家**选降落点**（对应 HTML 版的整屏地图交互）。
+	# 截图/联调走 --menu=0，直接落到默认点，不打断自动化。
+	if front_end != null and (auto_menu == 1 or auto_landing == 1):
+		var fe := front_end
+		fe.landing_confirmed.connect(func(site: Dictionary) -> void:
+			fe.detach()
+			front_end = null
+			if not site.is_empty():
+				world.base_site = { "x": float(site["x"]), "y": float(site["y"]),
+					"tx": int(float(site["x"]) / float(Cfg.TILE)),
+					"ty": int(float(site["y"]) / float(Cfg.TILE)) }
+			_build_world_systems())
+		fe.show_landing(world)
+		await get_tree().process_frame
+		return
+
+	_build_world_systems()
+
+
+## 世界生成之后、开局模拟之前：把节点与系统装配起来
+func _build_world_systems() -> void:
 	projectiles = $Projectiles
 	enemies = $Enemies
 	towers = $Towers
@@ -234,6 +266,10 @@ func _start_run(params: Dictionary) -> void:
 	cam_rig.bounds = Vector2(float(Cfg.WORLD_TILES * Cfg.TILE), float(Cfg.WORLD_TILES * Cfg.TILE))
 	cam_rig.snap_to(player.position.x, player.position.y)
 	enemies.cam_rig_ref = cam_rig
+	# 敌人拆建筑要用到的引用（基地被摧毁 → 追杀 + 人口清零）
+	enemies.director_ref = director
+	enemies.town_ref = town
+	enemies.towers_ref2 = towers
 	player.hurt.connect(func(mag: float) -> void: cam_rig.shake(mag))
 	_build_action_bar()
 	_build_gamepad_hint()
