@@ -270,11 +270,34 @@ func _build_world_systems() -> void:
 	cam_rig.bounds = Vector2(float(Cfg.WORLD_TILES * Cfg.TILE), float(Cfg.WORLD_TILES * Cfg.TILE))
 	cam_rig.snap_to(player.position.x, player.position.y)
 	enemies.cam_rig_ref = cam_rig
+	# 命中 / 击杀 → 火花 + 音效（距离衰减，远处不吵）
+	enemies.enemy_hit.connect(func(pos: Vector2, _dmg: float) -> void:
+		if effects != null:
+			effects.burst(pos, Color(1.0, 0.9, 0.55), 8, 0.9)
+		if audio != null:
+			audio.play_at("hit", pos.distance_to(player.position), 1200.0, -8.0))
+	enemies.enemy_killed_at.connect(func(pos: Vector2, elite: bool) -> void:
+		if effects != null:
+			effects.burst(pos, Color(1.0, 0.45, 0.35), 22 if elite else 14, 1.2)
+		if audio != null:
+			audio.play_at("explode", pos.distance_to(player.position), 1600.0, -4.0 if elite else -9.0))
 	# 敌人拆建筑要用到的引用（基地被摧毁 → 追杀 + 人口清零）
 	enemies.director_ref = director
 	enemies.town_ref = town
 	enemies.towers_ref2 = towers
 	player.hurt.connect(func(mag: float) -> void: cam_rig.shake(mag))
+	# 开火：枪口光 + 音效（重武器用另一套音色）
+	player.fired.connect(func(pos: Vector2, heavy: bool) -> void:
+		if lighting != null:
+			lighting.muzzle_flash(pos)
+		if audio != null:
+			audio.play("shoot_heavy" if heavy else "shoot_light", -6.0))
+	audio = Audio.new()
+	audio.setup(self)
+	audio.set_volume(float(settings.get_value("sfxVolume")))
+	print("[godot] 音效已装载 %d 个" % audio.loaded_count())
+	effects = Effects.new()
+	effects.setup(self)
 	lighting = Lighting.new()
 	lighting.setup(self)
 	_build_action_bar()
@@ -741,8 +764,10 @@ func _confirm_placement() -> void:
 	var mouse := get_global_mouse_position()
 	var t: Dictionary = towers.place_tower(mouse, {})
 	if t.is_empty():
+		audio.play("error")
 		print("[godot] 这里放不下（间隔 / 障碍 / 超出建造范围）")
 	else:
+		audio.play("build")
 		print("[godot] 空投 %s → (%.0f, %.0f)" % [towers.selected, mouse.x, mouse.y])
 		placing_tower = false
 
@@ -964,6 +989,7 @@ func _fill_tech(body: Node) -> void:
 		tech_view.on_pick = func(id: String) -> void:
 			if tech.unlock(id):
 				_recompute_stats()
+				audio.play("unlock")
 				print("[godot] 科技解锁：%s" % id)
 				tech_view.unlocked = tech.unlocked
 				tech_view.resources = tech.resources
@@ -1628,7 +1654,11 @@ var hud_dist: Label = null
 var hud_hotbar: Array = []
 var run_time := 0.0
 ## 昼夜光照（CanvasModulate + 点光源）—— Godot 相对 Canvas 的强项
-var lighting: Lighting = null          # 本局已玩秒数（昼夜按 240 秒一天，与 JS 一致）
+var lighting: Lighting = null
+## 音频（审计出的最大空白：之前游戏是静音的）
+var audio: Audio = null
+## 打击特效（GPU 粒子）
+var effects: Effects = null          # 本局已玩秒数（昼夜按 240 秒一天，与 JS 一致）
 var hud_boss: ProgressBar = null
 var hud_boss_label: Label = null
 
@@ -1668,14 +1698,14 @@ func _build_hud() -> void:
 	# ---- HUD 补全：对齐 HTML 版的信息量 ----
 	# 左上：天数 / 昼夜 / 时刻
 	hud_day = Label.new()
-	hud_day.position = Vector2(16, 68)
+	hud_day.position = Vector2(16, 74)
 	hud_day.add_theme_font_size_override("font_size", 13)
 	hud_day.add_theme_color_override("font_color", Color("#8ba0bb"))
 	hud_root.add_child(hud_day)
 
 	# 顶部中：局势（威胁 / 活巢 / 剩余 / 基地耐久）
 	hud_situation = Label.new()
-	hud_situation.position = Vector2(430, 40)
+	hud_situation.position = Vector2(430, 52)
 	hud_situation.custom_minimum_size = Vector2(680, 0)
 	hud_situation.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud_situation.add_theme_font_size_override("font_size", 13)
@@ -1684,8 +1714,8 @@ func _build_hud() -> void:
 
 	# 右上：完整资源条
 	hud_res = Label.new()
-	hud_res.position = Vector2(16, 88)
-	hud_res.custom_minimum_size = Vector2(900, 0)
+	hud_res.position = Vector2(16, 96)
+	hud_res.custom_minimum_size = Vector2(1000, 0)
 	hud_res.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	hud_res.add_theme_font_size_override("font_size", 13)
 	hud_res.add_theme_color_override("font_color", Color("#e8eef7"))
@@ -1693,7 +1723,7 @@ func _build_hud() -> void:
 
 	# 顶部细条：距离指示
 	hud_dist = Label.new()
-	hud_dist.position = Vector2(430, 60)
+	hud_dist.position = Vector2(430, 36)
 	hud_dist.custom_minimum_size = Vector2(280, 0)
 	hud_dist.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud_dist.add_theme_font_size_override("font_size", 12)

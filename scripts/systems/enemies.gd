@@ -12,6 +12,10 @@
 ## 近距离（600px 内）直接朝玩家走。
 extends Node2D
 
+
+## 命中 / 击杀 —— 给音效与粒子用（不让敌人系统直接依赖它们）
+signal enemy_hit(pos: Vector2, dmg: float)
+signal enemy_killed_at(pos: Vector2, elite: bool)
 const MELEE_REACH_PAD := 6.0
 const DIRECT_RANGE := 600.0
 const FLOW_REFRESH_TILES := 4
@@ -347,6 +351,7 @@ func _attack(e: Dictionary, def: Dictionary, d: float, want_range: float) -> voi
 
 
 func _on_killed(e: Dictionary) -> void:
+	enemy_killed_at.emit(Vector2(float(e["x"]), float(e["y"])), GdMath.truthy(e.get("elite", false)))
 	kills += 1
 	xp_total += int(round(float(e["xpValue"])))
 	gold_total += int(round(float(e["goldValue"])))
@@ -368,6 +373,7 @@ func hit_test(x: float, y: float, r: float, damage: float) -> bool:
 		if dx * dx + dy * dy > rr * rr:
 			continue
 		EnemyFactory.damage(e, damage)
+		enemy_hit.emit(Vector2(x, y), damage)
 		return true
 	return false
 

@@ -119,6 +119,8 @@ func _fire() -> void:
 				"r": float(s["r"]), "life": float(s["life"]),
 			})
 	_muzzle_flash = 1.0
+	var _mpos := position + Vector2(cos(facing), sin(facing)) * 18.0
+	fired.emit(_mpos, String(loadout.def.get("kind", "")) == "lob")
 
 
 func _draw() -> void:
@@ -195,6 +197,8 @@ const RESPAWN_HP_FRACTION := 0.6
 const RESPAWN_INVULN := 3.0
 
 signal died
+## 开火（参数：枪口位置、是否重武器）—— 用来接光照与音效
+signal fired(pos: Vector2, heavy: bool)
 signal hurt(mag: float)
 signal respawned
 
