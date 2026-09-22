@@ -40,9 +40,15 @@ func setup(p_world: GdWorld, p_player: Node2D, p_projectiles: Node2D, p_enemies:
 	stats = p_stats
 	_tower_defs = DataLoader.new().table("towers", "TOWER_DEF", {})
 	_structure_defs = DataLoader.new().table("towers", "STRUCTURE_DEF", {})
+	# ⚠️ 基地必须有 hp / maxHp：之前**根本没有这两个键** ——
+	#    结果基地血条永远满、维修功能修不了基地、HUD 一读就报错（脚本错误还会打断整段 HUD 更新）。
+	#    数值来自 Cfg.BASE（与 JS 同一张表）。
+	var base_def: Dictionary = DataLoader.new().table("config", "BASE", {})
+	var base_hp := DataLoader.num(base_def, "maxHp", 2600.0)
 	bases = [{
 		"x": base_pos.x, "y": base_pos.y, "r": 96.0,
-		"destroyed": false, "buildRadius": 520.0,
+		"hp": base_hp, "maxHp": base_hp, "shield": 0.0, "maxShield": 0.0,
+		"destroyed": false, "buildRadius": 520.0, "name": "殖民地核心舱",
 	}]
 
 

@@ -335,6 +335,7 @@ func _process(delta: float) -> void:
 			if hitstop <= 0.0:
 				hitstop_scale = 1.0
 		# 顿帧期间世界推进用 world_delta（现在只有敌人/弹丸吃这个缩放，够用且直观）
+		run_time += world_delta
 		enemies.update(world_delta)
 		projectiles.update(world_delta)
 		director.update(delta)
@@ -1571,6 +1572,13 @@ var hud_hp_label: Label = null
 var hud_left: Label = null
 var hud_right: Label = null
 var hud_wave: Label = null
+## HUD 补全：天数/局势/资源条/距离/快捷栏（对齐 HTML 版）
+var hud_day: Label = null
+var hud_situation: Label = null
+var hud_res: Label = null
+var hud_dist: Label = null
+var hud_hotbar: Array = []
+var run_time := 0.0          # 本局已玩秒数（昼夜按 240 秒一天，与 JS 一致）
 var hud_boss: ProgressBar = null
 var hud_boss_label: Label = null
 
@@ -1606,6 +1614,63 @@ func _build_hud() -> void:
 	hud_wave.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud_wave.add_theme_font_size_override("font_size", 16)
 	hud_root.add_child(hud_wave)
+
+	# ---- HUD 补全：对齐 HTML 版的信息量 ----
+	# 左上：天数 / 昼夜 / 时刻
+	hud_day = Label.new()
+	hud_day.position = Vector2(16, 68)
+	hud_day.add_theme_font_size_override("font_size", 13)
+	hud_day.add_theme_color_override("font_color", Color("#8ba0bb"))
+	hud_root.add_child(hud_day)
+
+	# 顶部中：局势（威胁 / 活巢 / 剩余 / 基地耐久）
+	hud_situation = Label.new()
+	hud_situation.position = Vector2(430, 40)
+	hud_situation.custom_minimum_size = Vector2(680, 0)
+	hud_situation.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hud_situation.add_theme_font_size_override("font_size", 13)
+	hud_situation.add_theme_color_override("font_color", Color("#ffba4c"))
+	hud_root.add_child(hud_situation)
+
+	# 右上：完整资源条
+	hud_res = Label.new()
+	hud_res.position = Vector2(16, 88)
+	hud_res.custom_minimum_size = Vector2(900, 0)
+	hud_res.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	hud_res.add_theme_font_size_override("font_size", 13)
+	hud_res.add_theme_color_override("font_color", Color("#e8eef7"))
+	hud_root.add_child(hud_res)
+
+	# 顶部细条：距离指示
+	hud_dist = Label.new()
+	hud_dist.position = Vector2(430, 60)
+	hud_dist.custom_minimum_size = Vector2(280, 0)
+	hud_dist.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hud_dist.add_theme_font_size_override("font_size", 12)
+	hud_dist.add_theme_color_override("font_color", Color("#8ba0bb"))
+	hud_root.add_child(hud_dist)
+
+	# 底部：8 格快捷栏（武器 1-4 + 道具 5-8）
+	var hotbar_row := HBoxContainer.new()
+	hotbar_row.position = Vector2(230, 634)
+	hotbar_row.add_theme_constant_override("separation", 6)
+	hud_hotbar = []
+	for i in 8:
+		var slot := Label.new()
+		slot.text = "[%d] （空）" % (i + 1)
+		slot.custom_minimum_size = Vector2(126, 20)
+		slot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		slot.add_theme_font_size_override("font_size", 13)
+		slot.add_theme_color_override("font_color", Color("#c9d4e0"))
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.06, 0.08, 0.12, 0.7)
+		style.border_color = Color(0.35, 0.45, 0.58, 0.5)
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(4)
+		slot.add_theme_stylebox_override("normal", style)
+		hotbar_row.add_child(slot)
+		hud_hotbar.append(slot)
+	hud_root.add_child(hotbar_row)
 
 	# 右上：地点与资源
 	# 固定放在右上角：窗口是固定 1280×720，用绝对坐标比 anchor 组合更不容易出错
@@ -1653,6 +1718,37 @@ func _update_hud() -> void:
 	hud_wave.text = HudModel.wave_text(director.state, director.timer, director.wave_number,
 		director.remaining, director.total, director.hunt_mode)
 	hud_wave.add_theme_color_override("font_color", HudModel.wave_color(director.state, director.hunt_mode))
+
+	# ---- HUD 补全：对齐 HTML 版的信息量（天数 / 局势 / 资源条 / 距离 / 快捷栏）----
+	if hud_day != null:
+		hud_day.text = HudModel.day_text(run_time, int(run_time / 240.0) + 1)
+	if hud_situation != null:
+		var ti: Dictionary = director.threat_info()
+		hud_situation.text = "%s ｜ %s" % [
+			HudModel.situation_title(director.state, director.wave_number, director.hunt_mode,
+				director.beacon_online),
+			HudModel.situation_sub(director.state, director.timer, director.remaining, director.total,
+				float(ti["total"]), int(ti["nests"]),
+				# 用 .get() 兜底：字典少一个键不该把整段 HUD 更新打断
+				float((towers.bases[0] as Dictionary).get("hp", 0.0)) if not towers.bases.is_empty() else 0.0,
+				float((towers.bases[0] as Dictionary).get("maxHp", 1.0)) if not towers.bases.is_empty() else 1.0)]
+	if hud_res != null:
+		hud_res.text = HudModel.resource_bar(props_layer.resources)
+	if hud_dist != null:
+		hud_dist.text = HudModel.distance_line(
+			player.position.distance_to(bases_pos),
+			player.position.distance_to(Vector2(vehicle.x, vehicle.y)),
+			_nearest_nest_distance(), vehicle.hp > 0.0)
+	if hud_hotbar != null:
+		var slots: Array = []
+		for w in hotbar.weapons:
+			slots.append({ "name": String((w as Dictionary).get("name", "武器")), "count": 1 })
+		for i in hotbar.item_counts.keys():
+			slots.append({ "name": Names.resource(String(i)), "count": int(hotbar.item_counts[i]) })
+		var names: Array = HudModel.hotbar_text(slots)
+		for i in (hud_hotbar as Array).size():
+			((hud_hotbar as Array)[i] as Label).text = "[%d] %s" % [i + 1, String(names[i])]
+
 	var biome_name := ""
 	var biome_defs: Dictionary = DataLoader.new().table("tiles", "BIOME_DEF", {})
 	var bkey := str(world.biomes[int(player.position.y / float(Cfg.TILE)) * Cfg.WORLD_TILES
@@ -2216,3 +2312,14 @@ func _weapon_base_range() -> float:
 	if player == null or player.loadout == null:
 		return 0.0
 	return DataLoader.num_or(player.loadout.def, "range", 0.0)
+
+## 离最近虫巢的距离（像素）；没有巢就返回一个很大的数（HUD 会跳过这一项）
+func _nearest_nest_distance() -> float:
+	if world == null or player == null:
+		return 1.0e9
+	var best := 1.0e9
+	for n in world.nests:
+		if GdMath.truthy(n.get("destroyed", false)):
+			continue
+		best = minf(best, player.position.distance_to(Vector2(float(n["x"]), float(n["y"]))))
+	return best

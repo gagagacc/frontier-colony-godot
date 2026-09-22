@@ -11,6 +11,18 @@
 class_name HudModel
 
 ## 血条比例（0~1），并给出颜色：低血变红
+## 以下转发到 HudExtra（HUD 补全的那几项）—— 断言统一从 HudModel 走
+static func day_text(t: float, d: int) -> String: return HudExtra.day_text(t, d)
+static func day_phase_label(t: float) -> String: return HudExtra.day_phase_label(t)
+static func situation_title(s: int, n: int, hunt: bool, online: bool) -> String: return HudExtra.situation_title(s, n, hunt, online)
+static func situation_sub(s: int, timer: float, rem: int, total: int, thr: float, nests: int, hp: float, mx: float) -> String:
+	return HudExtra.situation_sub(s, timer, rem, total, thr, nests, hp, mx)
+static func distance_text(px: float) -> String: return HudExtra.distance_text(px)
+static func distance_line(base_px: float, veh_px: float, nest_px: float, has_veh: bool) -> String:
+	return HudExtra.distance_line(base_px, veh_px, nest_px, has_veh)
+static func resource_bar(r: Dictionary) -> String: return HudExtra.resource_bar(r)
+static func hotbar_text(s: Array) -> Array: return HudExtra.hotbar_text(s)
+
 static func hp_fraction(hp: float, hp_max: float) -> float:
 	return GdMath.clampf01(hp / maxf(1.0, hp_max))
 

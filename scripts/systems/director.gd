@@ -53,6 +53,25 @@ var waves_started := 0
 var kills_at_wave_start := 0
 
 
+## 威胁值 / 活巢数（对应 JS `runState._computeThreat()`）—— HUD 用
+##
+## 公式照抄：total = 所有**未摧毁**巢穴的 threat 之和；
+## basePressure = total × (0.55 + 阵列等级 × 0.09 + 强度)。
+func threat_info() -> Dictionary:
+	var total := 0.0
+	var live := 0
+	for n in world.nests:
+		if GdMath.truthy(n.get("destroyed", false)):
+			continue
+		live += 1
+		total += float(n.get("threat", 0.0))
+	var intensity := 0.0
+	if stats != null:
+		intensity = stats.stat("beaconIntensity")
+	return { "total": total, "nests": live,
+		"basePressure": total * (0.55 + float(beacon_level) * 0.09 + intensity) }
+
+
 func setup(p_world: GdWorld, p_stats: StatSet, p_enemies: Node2D, p_player: Node2D, p_camera: Node2D, p_rng: Rng) -> void:
 	world = p_world
 	stats = p_stats
