@@ -51,7 +51,9 @@ func build(tile_defs: Dictionary) -> void:
 		var base := Color(String(def.get("color", "#888888")))
 		var tex_img := _load_tile_texture(tile_id)
 		for v in VARIANTS:
-			var amount := (float(v) / float(VARIANTS - 1) - 0.5) * 0.10
+			# 明暗差从 ±10% 收到 ±4%：玩家反馈「地形贴图很奇怪」——
+			# 5 档明暗差太大时，同一种地表会拼出明显的棋盘格
+			var amount := (float(v) / float(VARIANTS - 1) - 0.5) * 0.04
 			var cell := ti * VARIANTS + v
 			var cx := (cell % COLS) * TILE_PX
 			var cy := (cell / COLS) * TILE_PX

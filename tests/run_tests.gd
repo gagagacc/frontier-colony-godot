@@ -831,9 +831,11 @@ func _test_atlas() -> void:
 	_eq("atlas.size", a.image.get_width(), TileAtlas.COLS * TileAtlas.TILE_PX)
 	# 期望值在「地形改用 Kenney 贴图」那一次变更过：
 	#   旧 1352557544 = 全部程序化色块
-	#   新 2736775502 = terrain_*.png 贴图 + variant 明暗档
+	#   2736775502   = terrain_*.png 贴图 + variant 明暗档 ±10%
+	#   1457919289   = 同上，但明暗差收到 ±4%（玩家反馈「地形贴图很奇怪」：
+	#                  5 档差太大时同一种地表会拼出明显的棋盘格）
 	# 这条断言的意义是「画法变了要有人知道」，所以改期望值时**必须**在提交里说明原因。
-	_check(a.content_hash == 2736775502,
+	_check(a.content_hash == 1457919289,
 		"atlas.hash 稳定（%d）" % a.content_hash,
 		"图集哈希变了：%d（如果是有意改画法，更新这一行的期望值）" % a.content_hash)
 	# 取样验证：图集里「混凝土」那一档的中点像素应当接近 TILE_DEF 的颜色

@@ -15,7 +15,7 @@ const BANK := {
 	"shoot_heavy": ["shoot_heavy_0", "shoot_heavy_1"],
 	"hit": ["hit_0", "hit_1", "hit_2"],
 	"explode": ["explode_0", "explode_1"],
-	"unlock": ["unlock_0"],
+	"unlock": ["unlock_0", "confirm_0"],
 	"build": ["build_0"],
 	"error": ["error_0"],
 	"base_hit": ["base_hit_0"],

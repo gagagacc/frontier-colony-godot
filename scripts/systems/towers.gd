@@ -244,7 +244,9 @@ func _draw() -> void:
 		if GdMath.truthy(t["building"]):
 			var prog := clampf(float(t["buildProgress"]), 0.0, 1.0)
 			draw_arc(p, 26.0, 0, TAU, 24, Color(0.56, 0.88, 1.0, 0.45), 2.0)
-			draw_rect(Rect2(p - Vector2(16, 22 - 220 * (1 - prog * prog)), Vector2(32, 40)), Color("#5a7a94"))
+			# 空投**从上落下**：prog=0 时在上方 242px，prog=1 落到位置。
+			# （原来写成 `22 - 220*(1-prog²)`，结果是从下面升上来 —— 玩家一眼就看出来了）
+			draw_rect(Rect2(p - Vector2(16, 22 + 220 * (1 - prog * prog)), Vector2(32, 40)), Color("#5a7a94"))
 			draw_rect(Rect2(p.x - 30, p.y - 44, 60, 5), Color(0, 0, 0, 0.5))
 			draw_rect(Rect2(p.x - 29, p.y - 43, 58 * prog, 3), Color("#8fe0ff"))
 			continue

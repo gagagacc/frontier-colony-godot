@@ -215,6 +215,10 @@ func _build_world_systems() -> void:
 	towers = $Towers
 	terrain = $Terrain
 	terrain.setup(world, atlas, camera)
+	nest_layer = NestLayer.new()
+	nest_layer.name = "Nests"
+	nest_layer.setup(world)
+	add_child(nest_layer)
 
 	player = $Player
 	var start: Dictionary = world.base_site if world.base_site != null else { "x": float(Cfg.WORLD_PX) / 2.0, "y": float(Cfg.WORLD_PX) / 2.0 }
@@ -329,6 +333,16 @@ func _build_world_systems() -> void:
 	town.bases = towers.bases
 	crafting = Crafting.new()
 	hotbar = Hotbar.new()
+	# 开局物品：角色的 startItem（HTML 版每个角色都带一点消耗品）
+	var cdef0: Dictionary = DataLoader.new().module("characters").get("CHAR_DEF", {}).get(
+		String(start_params_static.get("character", "engineer")), {})
+	var start_item = cdef0.get("startItem", null)
+	if start_item is Dictionary:
+		var sid := String((start_item as Dictionary).get("id", ""))
+		var scount := int((start_item as Dictionary).get("count", 1))
+		if sid != "":
+			hotbar.item_counts[sid] = int(hotbar.item_counts.get(sid, 0)) + scount
+			print("[godot] 开局物品：%s ×%d" % [Names.resource(sid), scount])
 	# 把开局武器放进快捷栏第 1 格（不然「装备」页签永远是空的）
 	hotbar.weapons.append({ "id": String(wdef.get("id", "pistol")),
 		"name": String(wdef.get("name", "拓荒手枪")), "rarity": "common", "def": wdef })
@@ -426,6 +440,13 @@ func _process(delta: float) -> void:
 		props_layer.update(delta, Input.is_key_pressed(KEY_E), Input.is_key_pressed(KEY_E))
 		# E 也用来修：附近有打残的塔/建筑就先修（与 JS 的「维修优先于采集」同序）
 		_tick_repair(delta)
+		if nest_layer != null:
+			nest_layer.update(delta, player.position)
+		# 提示条：开局 20 秒后淡出，按 H 随时叫回来（玩家要求「别一直挡着」）
+		if hint_bar != null:
+			hint_fade += delta
+			if hint_fade > 20.0 and not Input.is_key_pressed(KEY_H):
+				hint_bar.modulate.a = maxf(0.0, hint_bar.modulate.a - delta * 0.8)
 		_check_base_destroyed()
 		town.update_population(delta)
 		town.update_production(delta)
@@ -598,7 +619,7 @@ func _key_action(key: int) -> void:
 		if placing_tower:
 			_cancel_placement()
 		else:
-			toggle_pause()
+			_open_pause_menu()
 		get_viewport().set_input_as_handled()
 		return
 	# ② 面板开着：只处理「切到另一个面板」
@@ -647,7 +668,14 @@ func _key_action(key: int) -> void:
 			if poi != null:
 				_loot_ruin(poi)
 				get_viewport().set_input_as_handled()
-		"slot1", "slot2", "slot3", "slot4", "slot5", "slot6", "slot7", "slot8":
+		"slot5", "slot6", "slot7", "slot8":
+			var iidx := int(act.substr(4).to_int()) - 1
+			var keys: Array = hotbar.item_counts.keys()
+			var slot_i := iidx - 4
+			if slot_i >= 0 and slot_i < keys.size():
+				_use_item(String(keys[slot_i]))
+			get_viewport().set_input_as_handled()
+		"slot1", "slot2", "slot3", "slot4":
 			var idx := int(act.substr(4).to_int()) - 1
 			if idx < Hotbar.MAX_WEAPONS:
 				if hotbar.select(idx) == "equip":
@@ -902,7 +930,16 @@ func _recompute_stats() -> void:
 #  阶段 11：暂停菜单与面板
 # =========================================================
 
-const TAB_NAMES := ["属性", "装备", "科技", "建造", "地图", "城镇", "实验", "行星", "系统", "副本", "制造", "设置", "图鉴"]
+const TAB_NAMES := ["属性", "装备", "科技", "建造", "地图", "城镇", "实验", "行星", "系统", "副本", "制造", "设置", "图鉴", "暂停"]
+
+## Esc：开/关**暂停菜单**（不碰各功能面板）
+func _open_pause_menu() -> void:
+	if paused:
+		toggle_pause()
+		return
+	panel_tab = TAB_NAMES.find("暂停")   # 末尾那一页
+	toggle_pause()
+
 
 func toggle_pause() -> void:
 	paused = not paused
@@ -911,6 +948,50 @@ func toggle_pause() -> void:
 	elif panel_root != null:
 		panel_root.visible = false
 	print("[godot] %s（Tab 切页签：%s）" % ["已暂停" if paused else "继续", "/".join(TAB_NAMES)])
+
+
+## Esc 的独立暂停菜单（与各功能面板分开 —— 玩家反馈「ESC 怎么也是科技」）
+func _fill_pause_menu(body: Node) -> void:
+	var title := Label.new()
+	title.text = "已暂停"
+	title.add_theme_font_size_override("font_size", 22)
+	body.add_child(title)
+	var hint := Label.new()
+	hint.text = "按 Esc 继续。各功能面板有各自的按键：T 科技 · B 建造 · G 城镇 · V 实验 · Tab 背包 · M 地图"
+	hint.add_theme_color_override("font_color", Color("#8ba0bb"))
+	body.add_child(hint)
+	body.add_child(Control.new())
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(_panel_btn("继续游戏", func() -> void: toggle_pause()))
+	row.add_child(_panel_btn("快速存档 (F5)", func() -> void:
+		SaveGame.save(self, "slot1")
+		print("[godot] 已存档 slot1")))
+	row.add_child(_panel_btn("快速读档 (F9)", func() -> void:
+		SaveGame.restore(self, SaveGame.load_data("slot1"))))
+	body.add_child(row)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 10)
+	row2.add_child(_panel_btn("设置", func() -> void:
+		panel_tab = TAB_NAMES.find("设置")
+		_refresh_panel()))
+	row2.add_child(_panel_btn("返回主菜单", func() -> void:
+		paused = false
+		if panel_root != null:
+			panel_root.visible = false
+		playing = false
+		_show_front_end()))
+	row2.add_child(_panel_btn("退出游戏", func() -> void: get_tree().quit()))
+	body.add_child(row2)
+
+
+## 面板里的按钮（统一样式，避免每处再写一遍）
+func _panel_btn(text: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(180, 36)
+	b.pressed.connect(cb)
+	return b
 
 
 func _refresh_panel() -> void:
@@ -964,6 +1045,8 @@ func _refresh_panel() -> void:
 			_fill_settings(body)
 		_:
 			_fill_codex(body)
+		13:
+			_fill_pause_menu(body)
 
 
 func _fill_inventory(body: Node) -> void:
@@ -1026,6 +1109,9 @@ func _fill_tech(body: Node) -> void:
 	scroll.custom_minimum_size = Vector2(820, 380)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	var canvas := Control.new()
+	# ⚠️ 必须 PASS：默认的 STOP 会把滚轮事件吃掉，ScrollContainer 收不到 ——
+	#    表现就是「科技界面偶尔滚不动」（玩家反馈）
+	canvas.mouse_filter = Control.MOUSE_FILTER_PASS
 	canvas.custom_minimum_size = tech_view.content_size()
 	canvas.draw.connect(func() -> void:
 		tech_view.draw_into(canvas))
@@ -1093,7 +1179,8 @@ func _fill_build(body: Node) -> void:
 	t_head.text = "— 防御塔 —"
 	t_head.add_theme_color_override("font_color", Color("#8ba0bb"))
 	body.add_child(t_head)
-	for id in defs.keys():
+	# ⚠️ 只列出**已经解锁**的塔：以前遍历的是全部定义，于是刚进游戏就能空降所有塔
+	for id in _unlocked_tower_ids():
 		var d: Dictionary = defs[id]
 		var row := HBoxContainer.new()
 		var name_l := Label.new()
@@ -1127,7 +1214,7 @@ func _fill_build(body: Node) -> void:
 	s_head.text = "— 建筑 —"
 	s_head.add_theme_color_override("font_color", Color("#8ba0bb"))
 	body.add_child(s_head)
-	for id in sdefs.keys():
+	for id in _unlocked_structure_ids():
 		var d2: Dictionary = sdefs[id]
 		var line := Label.new()
 		var cost2 := TowerMath.scale_cost(d2.get("cost", {}), 1.0 + player_stats.stat("buildCostMult"))
@@ -1517,11 +1604,16 @@ func _fill_system(body: Node) -> void:
 
 
 ## 行动栏（常驻 HUD）：把最常用的几个键做成一行提示，不用开面板也看得见
+var hint_bar: PanelContainer = null
+var hint_fade := 0.0
+
+
 func _build_action_bar() -> void:
 	var bar := PanelContainer.new()
 	bar.name = "ActionBar"
-	bar.position = Vector2(150, 668)
-	bar.custom_minimum_size = Vector2(1020, 34)
+	bar.position = Vector2(200, 682)   # 更靠下、更矮：少挡地图
+	bar.custom_minimum_size = Vector2(880, 26)
+	hint_bar = bar
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.06, 0.08, 0.12, 0.78)
 	style.border_color = Color(0.35, 0.45, 0.58, 0.6)
@@ -1533,12 +1625,12 @@ func _build_action_bar() -> void:
 	bar.add_child(row)
 	# 按键提示必须与**原版按键表**一致：之前这里写着「1/2 基座/塔」「N 撒怪」，
 	# 那是移植早期我自己编的键位，原版根本没有 —— 玩家一眼就看出不对。
-	for pair in [["WASD", "移动"], ["Shift", "冲刺"], ["Space", "闪避"], ["E", "采集/维修"],
-		["F", "上车/进虫巢/遗迹"], ["B", "建造"], ["T", "科技"], ["G", "城镇"],
-		["Tab", "背包"], ["M", "地图"], ["Esc", "面板"]]:
+	# 玩家反馈「提示条挡地图，没必要一直在下面」——只留最常用的，其余进面板看
+	for pair in [["WASD", "移动"], ["Space", "闪避"], ["E", "采集"], ["F", "交互"],
+		["B", "建造"], ["T", "科技"], ["Tab", "背包"], ["Esc", "暂停"]]:
 		var l := Label.new()
 		l.text = "[%s] %s" % [String(pair[0]), String(pair[1])]
-		l.add_theme_font_size_override("font_size", 13)
+		l.add_theme_font_size_override("font_size", 11)
 		l.add_theme_color_override("font_color", Color("#c9d4e0"))
 		row.add_child(l)
 		var sep := Label.new()
@@ -1669,6 +1761,8 @@ var hud_hotbar: Array = []
 var run_time := 0.0
 ## 昼夜光照（CanvasModulate + 点光源）—— Godot 相对 Canvas 的强项
 var lighting: Lighting = null
+## 巢穴层（世界里画出虫巢入口 —— 原来只在 minimap 上有）
+var nest_layer: NestLayer = null
 ## 低血量红屏（径向渐变，边缘红中间透明）
 var low_hp: TextureRect = null
 ## 基地最近挨打的时间（警戒边框用；JS 的 underAttack + lastAttackAt<1.2s 同义）
@@ -2427,6 +2521,54 @@ func _weapon_base_range() -> float:
 	return DataLoader.num_or(player.loadout.def, "range", 0.0)
 
 ## 离最近虫巢的距离（像素）；没有巢就返回一个很大的数（HUD 会跳过这一项）
+## 使用一件消耗品（HTML 版的 ITEM_DEF.use：heal / buff / repair / fuel / deploy / beacon）
+func _use_item(id: String) -> bool:
+	if int(hotbar.item_counts.get(id, 0)) <= 0:
+		return false
+	var defs: Dictionary = DataLoader.new().table("weapons", "ITEM_DEF", {})
+	var d: Dictionary = defs.get(id, {})
+	if d.is_empty():
+		return false
+	var use: Dictionary = d.get("use", {})
+	if use.is_empty():
+		return false
+	# 效果：与 JS ITEM_DEF.use 的字段一一对应
+	if use.has("heal"):
+		player.hp = minf(player.hp_max, player.hp + float(use["heal"]))
+	elif use.has("repair"):
+		# 修最近的建筑/基地
+		var cands: Array = []
+		for t in towers.towers:
+			cands.append(t)
+		for b in towers.bases:
+			cands.append(b)
+		var pick = Repair.nearest_repairable(cands, player.position.x, player.position.y, 200.0)
+		if pick == null:
+			print("[godot] 附近没有需要修的目标")
+			return false
+		var tgt: Dictionary = pick["target"]
+		tgt["hp"] = minf(float(tgt.get("maxHp", 0.0)), float(tgt.get("hp", 0.0)) + float(use["repair"]))
+	elif use.has("fuel"):
+		vehicle.fuel = minf(Vehicle.FUEL_MAX, vehicle.fuel + float(use["fuel"]))
+	elif use.has("buff"):
+		var b: Dictionary = use["buff"]
+		var mods := {}
+		for k in b.keys():
+			if String(k) != "dur":
+				mods[String(k)] = float(b[k])
+		player_stats.add_buff(mods, float(b.get("dur", 10.0)), id)
+	elif use.has("deploy"):
+		var site := world.find_open_spot(player.position.x + 70.0, player.position.y, 120.0)
+		towers.place_tower(Vector2(float(site["x"]), float(site["y"])), { "instant": true, "free": true })
+	else:
+		print("[godot] 这件物品的效果还没实现：%s" % JSON.stringify(use))
+		return false
+	hotbar.item_counts[id] = int(hotbar.item_counts.get(id, 0)) - 1
+	audio.play("build", -4.0)
+	print("[godot] 使用 %s（剩 %d）" % [String(d.get("name", id)), int(hotbar.item_counts[id])])
+	return true
+
+
 func _nearest_nest_distance() -> float:
 	if world == null or player == null:
 		return 1.0e9
@@ -2462,3 +2604,24 @@ func _vignette_texture() -> GradientTexture2D:
 	t.fill_from = Vector2(0.5, 0.5)
 	t.fill_to = Vector2(1.0, 0.5)
 	return t
+
+## 当前**已解锁**的塔 id（走 TechTree.unlocked_towers，与 JS 同一套判据）
+func _unlocked_tower_ids() -> Array:
+	if tech == null or player_stats == null:
+		return []
+	return tech.unlocked_towers(_unlocks_now())
+
+
+## 当前**已解锁**的建筑 id
+func _unlocked_structure_ids() -> Array:
+	if tech == null or player_stats == null:
+		return []
+	return tech.unlocked_structures(_unlocks_now())
+
+
+## 从属性里取出 unlocks（StatSet.fold 产出的那份）
+func _unlocks_now() -> Dictionary:
+	if player_stats == null:
+		return {}
+	var u = player_stats.get("unlocks")
+	return u if u is Dictionary else {}
