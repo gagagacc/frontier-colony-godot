@@ -298,6 +298,20 @@ func _build_world_systems() -> void:
 	print("[godot] 音效已装载 %d 个" % audio.loaded_count())
 	effects = Effects.new()
 	effects.setup(self)
+	# 低血量红屏：径向渐变 + 脉冲（JS 版没有；用 ColorRect + GradientTexture2D，不写 shader）
+	low_hp = TextureRect.new()
+	low_hp.name = "LowHpVignette"
+	low_hp.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	low_hp.stretch_mode = TextureRect.STRETCH_SCALE
+	low_hp.texture = _vignette_texture()
+	low_hp.modulate = Color(1, 1, 1, 0.0)
+	low_hp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	low_hp.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var low_layer := CanvasLayer.new()
+	low_layer.layer = 4
+	low_layer.name = "LowHpLayer"
+	low_layer.add_child(low_hp)
+	add_child(low_layer)
 	lighting = Lighting.new()
 	lighting.setup(self)
 	_build_action_bar()
@@ -1655,6 +1669,8 @@ var hud_hotbar: Array = []
 var run_time := 0.0
 ## 昼夜光照（CanvasModulate + 点光源）—— Godot 相对 Canvas 的强项
 var lighting: Lighting = null
+## 低血量红屏（径向渐变，边缘红中间透明）
+var low_hp: TextureRect = null
 ## 音频（审计出的最大空白：之前游戏是静音的）
 var audio: Audio = null
 ## 打击特效（GPU 粒子）
@@ -1689,7 +1705,7 @@ func _build_hud() -> void:
 
 	# 顶部中间：波次状态
 	hud_wave = Label.new()
-	hud_wave.position = Vector2(460, 12)
+	hud_wave.position = Vector2(460, 8)
 	hud_wave.custom_minimum_size = Vector2(360, 0)
 	hud_wave.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud_wave.add_theme_font_size_override("font_size", 16)
@@ -1698,14 +1714,14 @@ func _build_hud() -> void:
 	# ---- HUD 补全：对齐 HTML 版的信息量 ----
 	# 左上：天数 / 昼夜 / 时刻
 	hud_day = Label.new()
-	hud_day.position = Vector2(16, 74)
+	hud_day.position = Vector2(16, 62)
 	hud_day.add_theme_font_size_override("font_size", 13)
 	hud_day.add_theme_color_override("font_color", Color("#8ba0bb"))
 	hud_root.add_child(hud_day)
 
 	# 顶部中：局势（威胁 / 活巢 / 剩余 / 基地耐久）
 	hud_situation = Label.new()
-	hud_situation.position = Vector2(430, 52)
+	hud_situation.position = Vector2(400, 50)
 	hud_situation.custom_minimum_size = Vector2(680, 0)
 	hud_situation.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud_situation.add_theme_font_size_override("font_size", 13)
@@ -1714,7 +1730,7 @@ func _build_hud() -> void:
 
 	# 右上：完整资源条
 	hud_res = Label.new()
-	hud_res.position = Vector2(16, 96)
+	hud_res.position = Vector2(16, 80)
 	hud_res.custom_minimum_size = Vector2(1000, 0)
 	hud_res.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	hud_res.add_theme_font_size_override("font_size", 13)
@@ -1723,7 +1739,7 @@ func _build_hud() -> void:
 
 	# 顶部细条：距离指示
 	hud_dist = Label.new()
-	hud_dist.position = Vector2(430, 36)
+	hud_dist.position = Vector2(430, 32)
 	hud_dist.custom_minimum_size = Vector2(280, 0)
 	hud_dist.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud_dist.add_theme_font_size_override("font_size", 12)
@@ -2423,3 +2439,18 @@ func _tick_repair_hint_under_attack(b0: Dictionary) -> bool:
 		if GdMath.dist(float(e["x"]), float(e["y"]), float(b0.get("x", 0.0)), float(b0.get("y", 0.0))) < 160.0:
 			return true
 	return false
+
+## 边缘红、中间透明的径向渐变（低血量提示用）
+func _vignette_texture() -> GradientTexture2D:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.12, 0.16, 0.0))
+	grad.set_color(1, Color(1.0, 0.12, 0.16, 0.85))
+	grad.add_point(0.55, Color(1.0, 0.12, 0.16, 0.0))
+	var t := GradientTexture2D.new()
+	t.gradient = grad
+	t.width = 512
+	t.height = 288
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	return t
