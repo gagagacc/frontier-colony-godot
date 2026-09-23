@@ -41,6 +41,20 @@ func _process(_dt: float) -> void:
 	queue_redraw()
 
 
+## 水面波光材质（在 _ready 里挂上；加载失败就退回无材质）
+var shimmer_material: ShaderMaterial = null
+
+
+func _ready() -> void:
+	var path := "res://scripts/render/water_shimmer.gdshader"
+	if ResourceLoader.exists(path):
+		var sh := load(path)
+		if sh is Shader:
+			shimmer_material = ShaderMaterial.new()
+			shimmer_material.shader = sh
+			material = shimmer_material
+
+
 func _draw() -> void:
 	if world == null or atlas == null or atlas.texture == null:
 		return

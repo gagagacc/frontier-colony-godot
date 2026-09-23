@@ -18,7 +18,7 @@ var player_light: PointLight2D = null
 var base_light: PointLight2D = null
 var muzzle_light: PointLight2D = null
 var muzzle_timer := 0.0
-var alert: ColorRect = null
+var alert: TextureRect = null
 var alert_time := 0.0
 
 const DAY_LENGTH := 240.0
@@ -40,9 +40,14 @@ func setup(host: Node) -> void:
 	muzzle_light = _make_light("MuzzleLight", grad, Color(1.0, 0.9, 0.6), 0.0, 0.35)
 
 	# 基地挨打时的红色警戒边框（对应 JS 的 drawVignette）
-	alert = ColorRect.new()
+	alert = TextureRect.new()
 	alert.name = "AlertVignette"
-	alert.color = Color(1.0, 0.15, 0.2, 0.0)
+	# ⚠️ 用**径向渐变**而不是纯色 ColorRect：
+	#    纯色会把整屏染红（截图里一眼就看出来了），警戒边框应当只在边缘
+	alert.texture = _vignette()
+	alert.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	alert.stretch_mode = TextureRect.STRETCH_SCALE
+	alert.modulate = Color(1, 1, 1, 0.0)
 	alert.set_anchors_preset(Control.PRESET_FULL_RECT)
 	alert.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var layer := CanvasLayer.new()
@@ -138,11 +143,12 @@ func update(dt: float, time_sec: float, player_pos: Vector2, base_pos: Vector2,
 		# 基地挨打 1.2 秒内：红色边框脉冲（JS 的 drawVignette 同义）
 		if base_under_attack or base_destroyed:
 			alert_time += dt
-			var pulse := 0.16 + sin(alert_time * 6.0) * 0.07
-			alert.color = Color(1.0, 0.15, 0.2, maxf(0.0, pulse))
+			# 夜里同样的红会显得更重，所以整体压到 60%
+			var pulse := (0.16 + sin(alert_time * 6.0) * 0.07) * 0.6
+			alert.modulate = Color(1, 1, 1, maxf(0.0, pulse))   # 只做柔和提示，别把整屏糊红
 		else:
 			alert_time = 0.0
-			alert.color = Color(1.0, 0.15, 0.2, 0.0)
+			alert.modulate = Color(1, 1, 1, 0.0)
 
 
 ## 开火时闪一下（枪口光）
@@ -151,3 +157,19 @@ func muzzle_flash(pos: Vector2) -> void:
 		return
 	muzzle_light.position = pos
 	muzzle_timer = 0.08
+
+
+## 边缘红、中间透明的径向渐变
+func _vignette() -> GradientTexture2D:
+	var g := Gradient.new()
+	g.set_color(0, Color(1.0, 0.12, 0.16, 0.0))
+	g.set_color(1, Color(1.0, 0.12, 0.16, 0.9))
+	g.add_point(0.62, Color(1.0, 0.12, 0.16, 0.0))
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.width = 256
+	t.height = 144
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	return t

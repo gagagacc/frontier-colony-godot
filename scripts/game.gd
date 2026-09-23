@@ -1671,6 +1671,8 @@ var run_time := 0.0
 var lighting: Lighting = null
 ## 低血量红屏（径向渐变，边缘红中间透明）
 var low_hp: TextureRect = null
+## 基地最近挨打的时间（警戒边框用；JS 的 underAttack + lastAttackAt<1.2s 同义）
+var base_hit_timer := 0.0
 ## 音频（审计出的最大空白：之前游戏是静音的）
 var audio: Audio = null
 ## 打击特效（GPU 粒子）
@@ -1830,10 +1832,16 @@ func _update_hud() -> void:
 				float((towers.bases[0] as Dictionary).get("maxHp", 1.0)) if not towers.bases.is_empty() else 1.0)]
 	if lighting != null:
 		var b0: Dictionary = towers.bases[0] if not towers.bases.is_empty() else {}
+		# 基地挨打 → 警戒边框续期 1.2 秒（看结构受击时打的 hitFlash，语义与 JS 的
+		# underAttack + lastAttackAt<1.2s 一致；「怪只是靠近」不该报警）
+		if float(b0.get("hitFlash", 0.0)) > 0.0:
+			base_hit_timer = 1.2
+		elif base_hit_timer > 0.0:
+			base_hit_timer = maxf(0.0, base_hit_timer - 1.0 / 60.0)
 		lighting.update(1.0 / 60.0, run_time, player.position,
 			Vector2(float(b0.get("x", 0.0)), float(b0.get("y", 0.0))),
 			not towers.bases.is_empty(),
-			_tick_repair_hint_under_attack(b0),
+			base_hit_timer > 0.0,
 			GdMath.truthy(b0.get("destroyed", false)),
 			player_stats.stat("sightBonus"), world.planet_index)
 
