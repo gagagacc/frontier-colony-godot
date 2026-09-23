@@ -10,6 +10,9 @@
 ##   1 键：在鼠标处铺【防御塔基座】  2 键：在鼠标处空投一座哨戒塔
 extends Node2D
 
+## 生成素材里炮管的固有朝向（朝右上，约 -60°）。贴图旋转时要把这个偏移补回来。
+const SPRITE_BARREL_OFFSET := PI * 0.33
+
 const BUILD_INTERVAL_ROUNDS := 40.0
 
 var world: GdWorld
@@ -254,12 +257,15 @@ func _draw() -> void:
 		var tex := Sprites.tower_tex(String(t["type"]))
 		var a := float(t["angle"])
 		if tex != null:
-			# 有贴图：底座圆盘保留（能看出射程归属），炮塔本体贴图，再叠炮管表示朝向
+			# 有贴图：底座圆盘保留（能看出射程归属），炮塔贴图**跟着打击方向转**
 			draw_circle(p, 19.0, Color("#38414f"))
 			draw_circle(p, 19.0, Color("#6a7788") if not GdMath.truthy(t["onPlatform"]) else Color("#6ee7a8"), false, 2.0)
-			Sprites.draw_centered(self, tex, p, 34.0)
-			draw_line(p + Vector2(cos(a), sin(a)) * 6.0, p + Vector2(cos(a), sin(a)) * 21.0,
-				Color(0.9, 0.94, 1.0, 0.85), 3.0)
+			# ⚠️ 贴图必须旋转：素材上的炮管是朝「右上」画的（约 -60°），
+			#    原样画上去就会出现「炮管朝右上、却在打左边」的错位（玩家反馈）。
+			#    SPRITE_BARREL_OFFSET 是素材自身的炮管朝向，换素材时按需改。
+			draw_set_transform(p, a + SPRITE_BARREL_OFFSET, Vector2.ONE)
+			Sprites.draw_centered(self, tex, Vector2.ZERO, 34.0)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		else:
 			draw_circle(p, 19.0, Color("#38414f"))
 			draw_circle(p, 19.0, Color("#6a7788") if not GdMath.truthy(t["onPlatform"]) else Color("#6ee7a8"), false, 2.0)

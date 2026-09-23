@@ -30,11 +30,15 @@ static func get_tex(name: String) -> Texture2D:
 	return null
 
 
-## 塔的贴图（按 id 映射到我们拷贝进来的两张）
+## 塔的贴图：**一塔一张**（由本地生图模型生成的像素素材，4×4 素材表切出来的）。
+##
+## 找不到专属贴图时退回原来那两张 Kenney 通用炮塔 —— 所以少一两张也不会开天窗。
 static func tower_tex(id: String) -> Texture2D:
-	var heavy := ["mortar", "railgun", "tesla", "cryo", "flame", "sniper", "press", "forcefield"]
-	var name := "tower_heavy" if heavy.has(id) else "tower_light"
-	return get_tex(name)
+	var own := get_tex("tower_" + id)
+	if own != null:
+		return own
+	var heavy := ["mortar", "rail", "tesla", "cryo", "flameTower", "sniper", "magneticRail", "forceField"]
+	return get_tex("tower_heavy" if heavy.has(id) else "tower_light")
 
 
 ## 怪物的贴图：8 张单位图按种类轮换（同一种怪始终同一张，看起来才像"一个物种"）

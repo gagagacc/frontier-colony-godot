@@ -22,6 +22,9 @@ var town: Town
 var settings: Settings
 var crafting: Crafting
 var tech_view: TechTreeView
+## fold_effects 产出的解锁表（塔/建筑/特性）—— **必须在重算属性时存下来**，
+## 否则建造面板查不到「已解锁哪些塔」（这是玩家报的「研究了却建不出来」的根因）
+var unlocks_now: Dictionary = {}
 var hotbar: Hotbar
 var steam: SteamBridge
 var cam_rig: CameraRig
@@ -821,10 +824,16 @@ func _auto_build_towers() -> void:
 	# 一条相邻基座（间隔正好一格）
 	for i in 4:
 		towers.place_structure("turretSlot", b + Vector2(-140 + i * Cfg.TILE, 180))
-	# 基座上的塔（可以贴着一格一座）
-	for i in 4:
-		towers.selected = "sentry"
+	# 基座上的塔：**每座塔各来一座**（截图时一眼看到全部塔的贴图是否对上）
+	var ids: Array = DataLoader.new().table("towers", "TOWER_DEF", {}).keys()
+	ids.sort()
+	for i in mini(4, ids.size()):
+		towers.selected = String(ids[i])
 		towers.place_tower(b + Vector2(-140 + i * Cfg.TILE, 180), { "instant": true })
+	# 再摆一排：剩下的塔也各来一座（下方一行）
+	for i in range(4, mini(8, ids.size())):
+		towers.selected = String(ids[i])
+		towers.place_tower(b + Vector2(-140 + (i - 4) * Cfg.TILE, 300), { "instant": true })
 	# 空地上一座（用来对比：它周围一圈不能贴第二座）
 	towers.selected = "sentry"
 	towers.place_tower(b + Vector2(200, -140), { "instant": true })
@@ -920,6 +929,7 @@ func _recompute_stats() -> void:
 	effects.append({ "damage": 0.15, "attackSpeed": 0.1, "rangeMult": 0.2, "projectiles": 1 })
 	var folded := StatSet.fold_effects(effects)
 	player_stats.add(folded["stats"])
+	unlocks_now = folded.get("unlocks", {})
 	if player != null and player.loadout != null:
 		player.stats = player_stats
 		player.loadout.stats = player_stats
@@ -2619,9 +2629,6 @@ func _unlocked_structure_ids() -> Array:
 	return tech.unlocked_structures(_unlocks_now())
 
 
-## 从属性里取出 unlocks（StatSet.fold 产出的那份）
+## 已解锁的塔/建筑/特性（由 _recompute_stats 从 fold_effects 存下来）
 func _unlocks_now() -> Dictionary:
-	if player_stats == null:
-		return {}
-	var u = player_stats.get("unlocks")
-	return u if u is Dictionary else {}
+	return unlocks_now
