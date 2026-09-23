@@ -41,10 +41,22 @@ static func tower_tex(id: String) -> Texture2D:
 	return get_tex("tower_heavy" if heavy.has(id) else "tower_light")
 
 
-## 怪物的贴图：8 张单位图按种类轮换（同一种怪始终同一张，看起来才像"一个物种"）
+## 怪物的贴图：**16 只异星虫**（本地生图模型生成的像素素材），按种类哈希固定分配 ——
+## 同一种怪永远同一张，看起来才像「一个物种」。
+static var _kind_slot: Dictionary = {}      # kind -> 贴图序号（按首次出现顺序分配）
+static var _next_slot := 1
+
+
 static func enemy_tex(kind: String) -> Texture2D:
-	var idx := int(abs(kind.hash()) % 8) + 1
-	return get_tex("enemy_%d" % idx)
+	# ⚠️ 不要用 hash % 16 分配：种类少的时候会撞（同屏的怪全是同一张）。
+	# 改成**按首次出现顺序**发号：同一物种永远同一张，且不同物种尽量不重复。
+	if not _kind_slot.has(kind):
+		_kind_slot[kind] = _next_slot
+		_next_slot = (_next_slot % 16) + 1
+	var own := get_tex("enemy_%d" % int(_kind_slot[kind]))
+	if own != null:
+		return own
+	return get_tex("enemy_%d" % (int(abs(kind.hash()) % 8) + 1))
 
 
 ## 道具贴图：按道具 key 的前缀归类

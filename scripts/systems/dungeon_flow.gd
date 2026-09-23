@@ -19,6 +19,9 @@ var enter_ms := 0
 
 
 ## 进副本：新建一个世界并挖成虫巢，然后把所有系统切过去
+var game_ref = null      # enter 时记下，exit(玩家) 这种调用要靠它
+
+
 func enter(game, p_tier: int) -> bool:
 	if active:
 		return false
@@ -53,6 +56,7 @@ func enter(game, p_tier: int) -> bool:
 		print("[godot] 巢穴主就位：%s（hp %d，技能 %s）" % [
 			String(boss["def"].get("name", "?")), int(boss["hp"]), ",".join(kinds)])
 	print("[godot] 副本守军 %d 只" % guard)
+	game_ref = game
 	active = true
 	# 相机直接怼到新位置（不然会从地表「飞」过整张地图）
 	game.camera.position = game.player.position
@@ -66,7 +70,14 @@ func enter(game, p_tier: int) -> bool:
 
 
 ## 出副本：切回地表那份世界，玩家回到原处
-func exit(game) -> bool:
+func exit(game = null) -> bool:
+	# ⚠️ 调用方可能只传了玩家（player.respawn 就是这么调的）——
+	# 那种情况下 `game.player` 不存在，整个撤出会静默失败，人就留在副本里了（玩家报的 bug）。
+	if game == null or not (game is Object) or not ("player" in game):
+		game = game_ref
+	if game == null:
+		print("[godot] 撤出失败：没有 game 引用")
+		return false
 	if not active or surface_world == null:
 		return false
 	_retarget(game, surface_world)

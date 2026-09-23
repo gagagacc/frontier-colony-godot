@@ -140,6 +140,16 @@ static func _find_boxes(img: Image, pad: int) -> Array:
 			if merged:
 				break
 
+	# ③.5 切开「被合并在一起的多个图标」
+	#
+	# 实测坑：MERGE_GAP 即便调到 2，仍有相邻图标被连成一块 ——
+	# 最典型的是 sentry 那张切出来**两座塔**（一青一橙叠在一起）。
+	# 处理办法：看包围盒内部有没有**整行/整列都是空的**，有就从那里切开。
+	var split: Array = []
+	for b in boxes:
+		split.append_array(_split_on_gaps(solid, dw, b))
+	boxes = split
+
 	# ④ 去掉太小的噪点（< 0.4% 面积）
 	var min_area := float(dw * dh) * 0.004
 	var keep: Array = []
@@ -208,3 +218,64 @@ static func _fit_square(img: Image, size: int) -> Image:
 	out.fill(Color(0, 0, 0, 0))
 	out.blit_rect(scaled, Rect2i(0, 0, nw, nh), Vector2i((size - nw) / 2, (size - nh) / 2))
 	return out
+
+
+## 在空白行/列处把一个块切成多个（用于分开被误合并的相邻图标）
+static func _split_on_gaps(solid: PackedByteArray, dw: int, b: Rect2i) -> Array:
+	var x0 := b.position.x
+	var y0 := b.position.y
+	var x1 := b.position.x + b.size.x - 1
+	var y1 := b.position.y + b.size.y - 1
+	# 找「整行空」的位置
+	var row_breaks: Array = []
+	for y in range(y0, y1 + 1):
+		var any := false
+		for x in range(x0, x1 + 1):
+			if solid[y * dw + x] == 1:
+				any = true
+				break
+		if not any:
+			row_breaks.append(y)
+	var col_breaks: Array = []
+	for x in range(x0, x1 + 1):
+		var any := false
+		for y in range(y0, y1 + 1):
+			if solid[y * dw + x] == 1:
+				any = true
+				break
+		if not any:
+			col_breaks.append(x)
+	if row_breaks.is_empty() and col_breaks.is_empty():
+		return [b]      # 本来就是完整一块
+	# 用空白行/列把范围切成若干子矩形（先按行切，再按列切）
+	var out: Array = []
+	var y_start := y0
+	var y_edges: Array = row_breaks.duplicate()
+	y_edges.append(y1 + 1)
+	for ye in y_edges:
+		if ye - 1 < y_start:
+			continue
+		var x_start := x0
+		var x_edges: Array = []
+		for xb in col_breaks:
+			if xb >= x0 and xb <= x1:
+				x_edges.append(xb)
+		x_edges.append(x1 + 1)
+		for xe in x_edges:
+			if xe - 1 < x_start:
+				continue
+			var w: int = xe - x_start
+			var h: int = ye - y_start
+			if w > 0 and h > 0 and _has_content(solid, dw, x_start, y_start, w, h):
+				out.append(Rect2i(x_start, y_start, w, h))
+			x_start = xe + 1
+		y_start = ye + 1
+	return out if not out.is_empty() else [b]
+
+
+static func _has_content(solid: PackedByteArray, dw: int, x: int, y: int, w: int, h: int) -> bool:
+	for yy in range(y, y + h):
+		for xx in range(x, x + w):
+			if solid[yy * dw + xx] == 1:
+				return true
+	return false

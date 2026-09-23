@@ -1053,10 +1053,15 @@ func _refresh_panel() -> void:
 			_fill_trade(body)
 		11:
 			_fill_settings(body)
-		_:
+		12:
 			_fill_codex(body)
 		13:
 			_fill_pause_menu(body)
+		_:
+			# ⚠️ 默认分支必须放**最后**：GDScript 的 match 按书写顺序匹配，
+			# 把 `_:` 写在 `13:` 前面会让「暂停」也落进图鉴 ——
+			# 表现就是玩家按 Esc 看到的不是存档/退出菜单，而是图鉴（玩家报的）。
+			_fill_codex(body)
 
 
 func _fill_inventory(body: Node) -> void:

@@ -168,4 +168,25 @@ static func carve(world: GdWorld, tier: int) -> Dictionary:
 		"boss": boss, "chambers": chambers, "cleared": false, "region": region,
 	}
 	world.tile_revision += 1
+	# 挖完之后**必须重建 blocked**：道具与矿的生成读的是 blocked，
+	# 不刷新的话副本里的资源会按**地表**布局生成 —— 表现就是「长在墙里」（玩家报的 bug）。
+	refresh_blocked(world)
 	return { "plan": plan, "entry": entry, "playerStart": player_start, "boss": boss, "chambers": chambers }
+
+
+## 按 tiles 重新计算 blocked（挖完副本后调用）
+##
+## `blocked` 原本只在世界生成时建一次；副本挖掘只改 tiles，所以必须重建一次，
+## 否则所有依赖 blocked 的系统（道具生成、寻路、放置校验）看到的都是地表那份。
+static func refresh_blocked(world) -> void:
+	var w: int = world.w
+	var h: int = world.h
+	if world.blocked.size() != w * h:
+		world.blocked.resize(w * h)
+	for i in w * h:
+		var t: int = world.tiles[i]
+		var solid := Cfg.is_solid_tile(t)
+		if not solid:
+			# 巢穴的墙/地面另有定义：墙挡住，地面可走
+			solid = (t == Cfg.T_NEST_WALL)
+		world.blocked[i] = 1 if solid else 0
