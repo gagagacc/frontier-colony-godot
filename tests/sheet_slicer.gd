@@ -227,14 +227,20 @@ static func _split_on_gaps(solid: PackedByteArray, dw: int, b: Rect2i) -> Array:
 	var x1 := b.position.x + b.size.x - 1
 	var y1 := b.position.y + b.size.y - 1
 	# 找「整行空」的位置
+	#
+	# ⚠️ 实测坑（2026-09-23 第二次）：源表第 1 行第 1 格与第 2 行第 1 格两座小塔
+	# **上下粘成一块** —— 它们之间没有「全空」的行，因为抗锯齿像素在降采样网格上
+	# 连成了一条约 1 格宽的桥。所以行判据要带**容差**：墨量低于宽度 8% 就算空行。
+	#
+	# 列不这么干：炮管又细又长，严格判据才不会被腰斩。
+	var row_tol := maxi(1, int(float(x1 - x0 + 1) * 0.08))
 	var row_breaks: Array = []
 	for y in range(y0, y1 + 1):
-		var any := false
+		var ink := 0
 		for x in range(x0, x1 + 1):
 			if solid[y * dw + x] == 1:
-				any = true
-				break
-		if not any:
+				ink += 1
+		if ink <= row_tol:
 			row_breaks.append(y)
 	var col_breaks: Array = []
 	for x in range(x0, x1 + 1):

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bi3rghkhpn5lp"
-path="res://.godot/imported/tower_mortar2.png-4d7698fd3754ca8eda0227fcfe14bcd4.ctex"
+uid="uid://r575b4wk1htb"
+path="res://.godot/imported/prop_wreck.png-e494569b99c7e9dde0495db8ee90e71b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tower_mortar2.png"
-dest_files=["res://.godot/imported/tower_mortar2.png-4d7698fd3754ca8eda0227fcfe14bcd4.ctex"]
+source_file="res://assets/sprites/prop_wreck.png"
+dest_files=["res://.godot/imported/prop_wreck.png-e494569b99c7e9dde0495db8ee90e71b.ctex"]
 
 [params]
 

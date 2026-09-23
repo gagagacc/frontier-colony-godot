@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cqepddxh6s8xt"
-path="res://.godot/imported/tower_repairBay.png-ec38001430db75cbd3a4c357cc4cee32.ctex"
+uid="uid://ch8v3chmtpiym"
+path="res://.godot/imported/prop_metalHeap.png-5e876bb1b3bef61c3e9f1a0b50130970.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tower_repairBay.png"
-dest_files=["res://.godot/imported/tower_repairBay.png-ec38001430db75cbd3a4c357cc4cee32.ctex"]
+source_file="res://assets/sprites/prop_metalHeap.png"
+dest_files=["res://.godot/imported/prop_metalHeap.png-5e876bb1b3bef61c3e9f1a0b50130970.ctex"]
 
 [params]
 

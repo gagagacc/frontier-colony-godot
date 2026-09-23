@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dkhm7nctpimdy"
-path="res://.godot/imported/tower_extra3.png-3ced54c5991af7667f9962f17b27421c.ctex"
+uid="uid://c8eafb6q8lv5u"
+path="res://.godot/imported/prop_iceCore.png-04be2409983be5966f8005e88628d003.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tower_extra3.png"
-dest_files=["res://.godot/imported/tower_extra3.png-3ced54c5991af7667f9962f17b27421c.ctex"]
+source_file="res://assets/sprites/prop_iceCore.png"
+dest_files=["res://.godot/imported/prop_iceCore.png-04be2409983be5966f8005e88628d003.ctex"]
 
 [params]
 

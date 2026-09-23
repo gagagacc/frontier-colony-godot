@@ -1460,7 +1460,12 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
       nestScale: d.world.nestScale, poiScale: d.world.poiScale,
       compact: d.world.compact ? 1 : 0, landingSites: d.world.landingSites,
       waveSource: d.wave.source, warnSeconds: d.wave.warnSeconds, prepSeconds: d.wave.prepSeconds,
-      endCondition: d.endCondition, fieldRadius: d.fieldRadius,
+      endCondition: d.endCondition,
+      // ⚠️ 必须 ?? 900 兜底：开拓模式的数据里**没有** fieldRadius，
+      //    直接写 d.fieldRadius 会被 JSON.stringify 丢掉整个键，
+      //    GDScript 侧 `m["fieldRadius"]` 就报 key 不存在、整个 _test_modes 静默中断。
+      //    JS 侧到处写的是 `fieldRadius || 900`，这里存**生效值**才对得上。
+      fieldRadius: d.fieldRadius ?? 900,
       startResources: d.startResources,
     };
   });

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://calrgkjtlsduh"
-path="res://.godot/imported/tower_press.png-82412d6bf7a3c6d0824819ee42bd8354.ctex"
+uid="uid://cwqqy3lstn5je"
+path="res://.godot/imported/prop_wreckCache.png-731821f569367c2fbedab9b0d19a39a0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tower_press.png"
-dest_files=["res://.godot/imported/tower_press.png-82412d6bf7a3c6d0824819ee42bd8354.ctex"]
+source_file="res://assets/sprites/prop_wreckCache.png"
+dest_files=["res://.godot/imported/prop_wreckCache.png-731821f569367c2fbedab9b0d19a39a0.ctex"]
 
 [params]
 

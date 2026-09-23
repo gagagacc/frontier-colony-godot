@@ -176,11 +176,23 @@ static func carve(world: GdWorld, tier: int) -> Dictionary:
 
 ## 按 tiles 重新计算 blocked（挖完副本后调用）
 ##
-## `blocked` 原本只在世界生成时建一次；副本挖掘只改 tiles，所以必须重建一次，
-## 否则所有依赖 blocked 的系统（道具生成、寻路、放置校验）看到的都是地表那份。
+## ## 这里的坑（2026-09-23 修的）
+##
+## 原先写的是 `world.w / world.h` —— 但 `GdWorld` **没有这两个属性**（尺寸是 `const W`），
+## 于是这函数每次都在第一行就抛 `Invalid access to property 'w'`，
+## **静默中断**（GDScript 的脚本错误只打印，不抛出，调用方完全无感）。
+##
+## ## blocked 到底管什么
+##
+## 道具生成（props.gd）与寻路（flow_field.gd）其实读的是 **`tiles`**，
+## 不是 `blocked`；`blocked` 只用于 `is_blocked_px()`（移动/放置校验）里的**额外**阻挡
+## （建筑占格），查询时本来就会 `or is_solid_tile(tiles[i])`。
+## 所以这里重建只是让 blocked 与 tiles 保持一致，别让它留着地表那份脏数据。
 static func refresh_blocked(world) -> void:
-	var w: int = world.w
-	var h: int = world.h
+	var w: int = Cfg.WORLD_TILES
+	var h: int = Cfg.WORLD_TILES
+	if world == null or world.tiles.size() != w * h:
+		return                      # 尺寸不对就一个字都别改，免得把数组写坏
 	if world.blocked.size() != w * h:
 		world.blocked.resize(w * h)
 	for i in w * h:

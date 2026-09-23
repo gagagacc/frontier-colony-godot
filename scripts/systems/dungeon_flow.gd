@@ -101,6 +101,10 @@ func _retarget(game, w: GdWorld) -> void:
 	game.projectiles.world = w
 	game.enemies.world = w
 	game.towers.world = w
+	# ⚠️ 道具系统也必须跟着切：不然副本里画的是**地表那批道具**（按地表坐标画在巢壁上，
+	#    玩家报的「虫巢里矿位置不对」）。switch_world 会把地表那份寄存起来，出来时装回。
+	game.props.switch_world(w)
+	game.props_layer.setup(w, game.props, game.player, game.player_stats)
 	game.minimap.setup(w, game.atlas, game.player)
 	if w.dungeon == null:
 		# 回地表：按基地重建建造范围（副本里建造范围是被清掉的）

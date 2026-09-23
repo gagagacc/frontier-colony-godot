@@ -13,17 +13,37 @@
  */
 import { execFileSync } from 'node:child_process';
 import { GODOT_PROJECT, GOLDEN_PATH, findGodotBinary } from './paths.mjs';
-import { existsSync, mkdirSync, readdirSync, statSync, rmSync, copyFileSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, statSync, rmSync, copyFileSync, writeFileSync, readFileSync } from 'node:fs';
+import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GODOT = join(ROOT, 'tools', 'godot-dl', 'exe', 'Godot_v4.4.1-stable_win64_console.exe');
 const TPZ = join(ROOT, 'tools', 'godot-dl', 'templates.tpz');
 const TEMPLATE_DIR = join(process.env.APPDATA || '', 'Godot', 'export_templates', '4.4.1.stable');
-const OUT_DIR = join(ROOT, 'dist-godot');
 const DEBUG_BUILD = process.argv.includes('--debug');
 const PRESET = 'Windows Desktop';
+
+// 产物目录**从预设里读**，不要自己拼：
+// 预设写的是 `../dist-godot/开拓者-殖民地.exe`（工程外那一层），
+// 而早先这里硬编码成 `工程/dist-godot` —— 于是导出明明成功，脚本却在空目录里找 exe，
+// 报「导出失败：没有生成 exe」，还让人以为是 rcedit 的锅（查了半天）。
+function readExportPath() {
+  const cfg = join(ROOT, 'export_presets.cfg');
+  if (!existsSync(cfg)) return null;
+  const text = readFileSync(cfg, 'utf8');
+  // 取 Windows Desktop 那一段里的 export_path
+  const blocks = text.split(/^\[preset\./m);
+  for (const b of blocks) {
+    if (!b.includes('name="Windows Desktop"')) continue;
+    const m = b.match(/^export_path="(.*)"$/m);
+    if (m) return resolve(ROOT, m[1]);
+  }
+  return null;
+}
+
+const EXPORT_EXE = readExportPath() || join(ROOT, 'dist-godot', '开拓者-殖民地.exe');
+const OUT_DIR = dirname(EXPORT_EXE);
 
 function log(msg) { console.log(msg); }
 
@@ -93,10 +113,10 @@ if (existsSync(steamDll)) {
 }
 
 // 3) 结果检查：exe 必须真的生出来
-const exe = join(OUT_DIR, '开拓者-殖民地.exe');
-const pck = join(OUT_DIR, '开拓者-殖民地.pck');
+const exe = EXPORT_EXE;
+const pck = join(OUT_DIR, basename(EXPORT_EXE).replace(/\.exe$/i, '') + '.pck');
 if (!existsSync(exe)) {
-  console.error('❌ 导出失败：没有生成 exe');
+  console.error(`❌ 导出失败：没有生成 exe（找的是 ${exe}）`);
   process.exit(3);
 }
 const mb = (p) => existsSync(p) ? (statSync(p).size / 1048576).toFixed(1) + ' MB' : '—';

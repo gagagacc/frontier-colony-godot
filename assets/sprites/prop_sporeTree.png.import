@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dpcb5h5dlan0q"
-path="res://.godot/imported/tower_missile.png-7f19fcbf7a2203f705729014546e58ed.ctex"
+uid="uid://b2jdyomo4p5v6"
+path="res://.godot/imported/prop_sporeTree.png-c4b0064c02aceba53f8675a74435a9b5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tower_missile.png"
-dest_files=["res://.godot/imported/tower_missile.png-7f19fcbf7a2203f705729014546e58ed.ctex"]
+source_file="res://assets/sprites/prop_sporeTree.png"
+dest_files=["res://.godot/imported/prop_sporeTree.png-c4b0064c02aceba53f8675a74435a9b5.ctex"]
 
 [params]
 

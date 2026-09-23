@@ -25,7 +25,15 @@ func _initialize() -> void:
 		print("SLICE_FAIL " + String(res.get("error", "?")))
 		quit(1)
 		return
+	# boxes 一并打出来：切出来的每一块在源表上的坐标，是「第几行第几列」的**权威依据**
+	# （靠肉眼比对源表容易张冠李戴 —— 上一版就是这么把 dronePlatform 和 forceField 弄反的）
+	var boxes: Array = res.get("boxes", [])
+	var brief: Array = []
+	for b in boxes:
+		brief.append([b.position.x, b.position.y, b.size.x * SheetSlicer.DOWNSCALE,
+			b.size.y * SheetSlicer.DOWNSCALE])
 	print("SLICE_OK " + JSON.stringify({
 		"count": res["count"], "detected": res["detected"], "out": out_dir, "names": res["names"],
+		"boxes": brief,
 	}))
 	quit(0)

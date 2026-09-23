@@ -72,6 +72,8 @@ func _initialize() -> void:
 	_test_front_flow()
 	_test_hud()
 	_test_steam()
+	_test_assets()
+	_test_world_switch()
 	_test_feel(cases.get("feel", {}))
 	_test_gunplay(cases.get("gunplay", {}))
 	_test_camera(cases.get("camera", {}))
@@ -2074,6 +2076,138 @@ func _test_steam() -> void:
 	sb3.load_local()
 	_check(sb3.has("ACH_NEST_CLEAR"), "steam.成就本地存档往返", "读回来丢了")
 	_approx("steam.统计量存档往返", float(sb3.stats.get("kills_total", 0.0)), 123.0)
+
+
+## 素材完整性 —— 「贴图悄悄没了 / 换了但标定表没更新」这类问题必须被断言挡住。
+##
+## 由来：2026-09-23 重切素材表前用通配符清了旧图，结果 `tower_*.png` **全没了**、只剩 `.import` 边车，
+## 游戏里 11 座塔**静默退回** Kenney 那两张通用炮塔（玩家报「炮塔哪变样了」），
+## 而当时 5964 条断言**全绿** —— 因为没人检查「贴图到底在不在」。
+##
+## 顺便把逐塔的炮管标定也对一遍：素材换了而 `data/barrel_angles.json` 没重新生成时，
+## 炮管就会和目标差一个固定夹角（玩家报过「炮管和打击方向不一致」）。
+func _test_assets() -> void:
+	var defs: Dictionary = DataLoader.new().table("towers", "TOWER_DEF", {})
+	_check(defs.size() >= 11, "素材.塔定义读到 11 座以上", str(defs.size()))
+	var table := Sprites.barrel_table()
+	for id in defs.keys():
+		var sid := String(id)
+		var path := "res://assets/sprites/tower_%s.png" % sid
+		_check(Sprites.get_tex("tower_" + sid) != null, "素材.塔有专属贴图：" + sid,
+			"缺失会静默退回 Kenney 通用炮塔")
+		if not FileAccess.file_exists(ProjectSettings.globalize_path(path)):
+			continue
+		_check(table.has("tower_" + sid), "素材.炮管标定表有：" + sid,
+			"跑 tests/probe_barrel.gd -- --write=1 重新生成")
+		if not table.has("tower_" + sid):
+			continue
+		var m := _measure_barrel(path)
+		var cal := float(table["tower_" + sid])
+		if cal < 0.0:
+			_check(float(m["iou"]) >= 0.88, "素材.对称贴图（无炮管）判定：" + sid,
+				"IoU=%.3f" % float(m["iou"]))
+		else:
+			var d := absf(float(m["angle"]) - cal)
+			_check(d <= deg_to_rad(3.0), "素材.炮管标定与贴图一致：" + sid,
+				"表 %.3f rad · 实测 %.3f rad" % [cal, float(m["angle"])])
+	for i in range(1, 17):
+		_check(Sprites.get_tex("enemy_%d" % i) != null, "素材.怪物贴图存在：enemy_%d" % i)
+	# 道具：14 种可采集物**每种都要有专属贴图** —— 少一张就会退回程序化形状（圆/三角/方块），
+	# 也就是玩家说的「一片色块」。
+	var prop_defs: Dictionary = DataLoader.new().table("tiles", "PROP_DEF", {})
+	_check(prop_defs.size() >= 14, "素材.道具定义读到 14 种以上", str(prop_defs.size()))
+	for k in prop_defs.keys():
+		var ptype := String(k)
+		_check(Sprites.get_tex("prop_" + ptype) != null, "素材.道具有专属贴图：" + ptype,
+			"缺失会退回程序化色块")
+
+
+## 进出副本时**道具系统必须跟着换世界** —— 玩家报的「虫巢里矿生成位置不对」就出在这儿。
+##
+## 副本是**另一个 World 对象**（dungeon_flow.gd），而道具是按「世界坐标 + 本地块」生成的。
+## 不换的话，站在副本里看到的还是**地表那批道具**，按地表坐标糊在巢壁和虚空上。
+## JS 那边副本是 `world.noProps = true`（dungeon.js:86）—— 副本里本来就不该有任何道具。
+func _test_world_switch() -> void:
+	var surface := GdWorld.new("props-golden", { "nestScale": 0.3, "poiScale": 0.3 })
+	var pr := Props.new()
+	pr.setup(surface)
+	for cx in 4:
+		for cy in 4:
+			pr.ensure_around(3000.0 + float(cx) * 200.0, 3000.0 + float(cy) * 200.0, 400.0)
+	var n0 := pr.props.size()
+	_check(n0 > 0, "切世界.地表生成出了道具", "地表没道具的话这条测试等于没测")
+
+	var dung := GdWorld.new("props-golden:nest:3", {})
+	Dungeon.carve(dung, 3)
+	_check(dung.no_props, "切世界.副本标记 no_props（与 JS dungeon.js 一致）")
+	pr.switch_world(dung)
+	_check(pr.world == dung, "切世界.道具系统指向副本世界")
+	_check(pr.props.is_empty(), "切世界.副本里没有地表道具", "这就是「矿长在墙里」的根源")
+	_check(pr.chunks.is_empty(), "切世界.副本里清掉了地表区块缓存")
+
+	pr.switch_world(surface)
+	_check(pr.world == surface, "切世界.切回地表")
+	_eq("切世界.地表道具原样装回", pr.props.size(), n0)
+	_check(not pr.chunks.is_empty(), "切世界.地表区块缓存也装回来了")
+
+
+## 量一张贴图里炮管的仰角（正数，弧度）与左右镜像 IoU。算法与 tests/probe_barrel.gd 一致。
+func _measure_barrel(path: String) -> Dictionary:
+	var img := Image.load_from_file(ProjectSettings.globalize_path(path))
+	if img == null:
+		return { "angle": 0.0, "iou": 0.0 }
+	img.convert(Image.FORMAT_RGBA8)
+	var w := img.get_width()
+	var h := img.get_height()
+	var y0 := h
+	var y1 := -1
+	for y in h:
+		for x in w:
+			if img.get_pixel(x, y).a > 0.15:
+				y0 = mini(y0, y)
+				y1 = maxi(y1, y)
+	if y1 < y0:
+		return { "angle": 0.0, "iou": 0.0 }
+	var base_top := y0 + int(float(y1 - y0) * 0.75)
+	var bx := 0.0
+	var by := 0.0
+	var bn := 0
+	for y in range(base_top, y1 + 1):
+		for x in w:
+			if img.get_pixel(x, y).a > 0.15:
+				bx += float(x)
+				by += float(y)
+				bn += 1
+	var min_y := h
+	var muzzle_x := 0.0
+	for y in h:
+		var sx := 0.0
+		var hit := 0
+		for x in w:
+			if img.get_pixel(x, y).a > 0.15:
+				sx += float(x)
+				hit += 1
+		if hit > 0:
+			min_y = y
+			muzzle_x = sx / float(hit)
+			break
+	if bn == 0:
+		return { "angle": 0.0, "iou": 0.0 }
+	bx /= float(bn)
+	by /= float(bn)
+	var angle := absf(atan2(float(min_y) - by, muzzle_x - bx))
+	var diff := 0
+	var total := 0
+	for y in h:
+		for x in w / 2:
+			var l := img.get_pixel(x, y).a > 0.15
+			var r := img.get_pixel(w - 1 - x, y).a > 0.15
+			if l or r:
+				total += 1
+			if l != r:
+				diff += 1
+	var iou := 1.0 if total == 0 else 1.0 - float(diff) / float(total)
+	return { "angle": angle, "iou": iou }
 
 
 ## 手感回归：移动 / 冲刺 / 闪避（阶段 13 的「手感」那半）

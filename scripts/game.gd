@@ -144,7 +144,7 @@ func _ready() -> void:
 	Binds.apply_to_input_map()
 	_parse_cli()
 	# 界面主题：中文像素字体 + 科幻面板皮（素材缺失会自动退回默认样式）
-	get_window().theme = UiTheme.build()
+	get_window().theme = UiTheme.get_theme()
 	# 设置要在开局前的界面里就能生效（音量/窗口模式）
 	settings = Settings.new()
 	settings.load_settings()

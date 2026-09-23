@@ -1,0 +1,13 @@
+{
+  "tower_cryo": 1.042,
+  "tower_dronePlatform": -1.0,
+  "tower_flameTower": 1.2208,
+  "tower_forceField": -1.0,
+  "tower_gatling": 1.185,
+  "tower_magneticRail": 1.0977,
+  "tower_mortar": 1.1798,
+  "tower_rail": 1.1538,
+  "tower_sentry": 1.1274,
+  "tower_sniper": 1.0649,
+  "tower_tesla": 1.0719
+}

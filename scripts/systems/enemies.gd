@@ -65,8 +65,8 @@ func spawn(monster_def: Dictionary, x: float, y: float, opts: Dictionary = {}) -
 
 ## 在玩家附近撒一波（阶段 8 的波次系统会接管这件事）
 func spawn_around(count: int, radius_min: float, radius_max: float, tier: int = 1) -> void:
-	if _types.is_empty():
-		return
+	if _types.is_empty() or player == null:
+		return          # 没有玩家（无角色模式 / 测试里）就没什么「附近」可言，直接不撒
 	for i in count:
 		var a := randf() * TAU
 		var r := randf_range(radius_min, radius_max)

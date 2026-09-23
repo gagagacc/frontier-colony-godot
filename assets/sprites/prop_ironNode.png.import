@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cmveh3epqy4gb"
-path="res://.godot/imported/tower_extra2.png-5058fc54d6faf8e3e7086e091d49d576.ctex"
+uid="uid://b6yx3fajy7y2w"
+path="res://.godot/imported/prop_ironNode.png-f791f51c4f2ea0c144fd873f37f1c962.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tower_extra2.png"
-dest_files=["res://.godot/imported/tower_extra2.png-5058fc54d6faf8e3e7086e091d49d576.ctex"]
+source_file="res://assets/sprites/prop_ironNode.png"
+dest_files=["res://.godot/imported/prop_ironNode.png-f791f51c4f2ea0c144fd873f37f1c962.ctex"]
 
 [params]
 

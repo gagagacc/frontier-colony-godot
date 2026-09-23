@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://1lekwyg280jq"
-path="res://.godot/imported/tower_laser.png-43eb366e54d78798248936864cd64c43.ctex"
+uid="uid://iqsgr2oub6ai"
+path="res://.godot/imported/prop_eggSac.png-2161f729cff0c6093ae28c7cc54e67b7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tower_laser.png"
-dest_files=["res://.godot/imported/tower_laser.png-43eb366e54d78798248936864cd64c43.ctex"]
+source_file="res://assets/sprites/prop_eggSac.png"
+dest_files=["res://.godot/imported/prop_eggSac.png-2161f729cff0c6093ae28c7cc54e67b7.ctex"]
 
 [params]
 

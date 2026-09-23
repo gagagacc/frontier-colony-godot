@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-23T13:59:48.108Z",
+  "generatedAt": "2026-09-23T14:40:05.952Z",
   "cases": {
     "hashStr": [
       {
@@ -12047,6 +12047,7 @@
           "warnSeconds": 22,
           "prepSeconds": 0,
           "endCondition": "baseDestroyed",
+          "fieldRadius": 900,
           "startResources": {}
         },
         {

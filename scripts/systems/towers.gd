@@ -10,7 +10,9 @@
 ##   1 键：在鼠标处铺【防御塔基座】  2 键：在鼠标处空投一座哨戒塔
 extends Node2D
 
-## 生成素材里炮管的固有朝向（朝右上，约 -60°）。贴图旋转时要把这个偏移补回来。
+## ⚠️ 炮管朝向**不要**在这里写常量：每张素材的仰角都不同（实测 59.7°~69.9°），
+## 补偿量按塔查 `Sprites.barrel_offset()`（标定表 `data/barrel_angles.json`）。
+## 这里只留历史常量给旧测试引用，实际渲染不再用它。
 const SPRITE_BARREL_OFFSET := PI * 0.33
 
 const BUILD_INTERVAL_ROUNDS := 40.0
@@ -260,10 +262,14 @@ func _draw() -> void:
 			# 有贴图：底座圆盘保留（能看出射程归属），炮塔贴图**跟着打击方向转**
 			draw_circle(p, 19.0, Color("#38414f"))
 			draw_circle(p, 19.0, Color("#6a7788") if not GdMath.truthy(t["onPlatform"]) else Color("#6ee7a8"), false, 2.0)
-			# ⚠️ 贴图必须旋转：素材上的炮管是朝「右上」画的（约 -60°），
-			#    原样画上去就会出现「炮管朝右上、却在打左边」的错位（玩家反馈）。
-			#    SPRITE_BARREL_OFFSET 是素材自身的炮管朝向，换素材时按需改。
-			draw_set_transform(p, a + SPRITE_BARREL_OFFSET, Vector2.ONE)
+			# ⚠️ 贴图必须旋转：素材上的炮管是朝「右上」画的（实测 60°~70°），
+			#    原样画上去就会「炮管朝右上、却在打左边」（玩家反馈）。
+			#    补偿量**逐塔查标定表**（data/barrel_angles.json，由 tests/probe_barrel.gd 量出），
+			#    因为每张素材的炮管仰角都不一样，写死一个常量有几座塔必然歪。
+			#    表里 -1 = 镜像对称、没有炮管的贴图（力场穹顶/无人机平台）→ 不旋转。
+			var off := Sprites.barrel_offset(String(t["type"]))
+			var rot := a + off if off >= 0.0 else 0.0
+			draw_set_transform(p, rot, Vector2.ONE)
 			Sprites.draw_centered(self, tex, Vector2.ZERO, 34.0)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		else:

@@ -74,7 +74,9 @@ func end_condition() -> String:
 func world_opts() -> Dictionary:
 	var w: Dictionary = def().get("world", {})
 	return {
-		# num() 而不是 num_or()：塔防模式的 nestScale 就是 0（不撒巢穴）`n		"nestScale": DataLoader.num(w, "nestScale", 1.0),
+		# num() 而不是 num_or()：塔防模式的 nestScale 就是 0（不撒巢穴），
+		# 用 num_or() 会把合法的 0 当「缺省」兜回 1.0 —— 塔防模式就会乱撒巢穴
+		"nestScale": DataLoader.num(w, "nestScale", 1.0),
 		"poiScale": DataLoader.num(w, "poiScale", 1.0),
 		"compact": GdMath.truthy(w.get("compact", false)),
 		"landingSites": DataLoader.int_of(w, "landingSites", 3),

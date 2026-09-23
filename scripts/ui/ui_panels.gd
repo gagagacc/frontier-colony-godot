@@ -114,17 +114,25 @@ static func stat_rows(stats: StatSet) -> Array:
 
 
 ## 面板外壳：返回一个装满内容的窗口（调用方自己 add_child）
+##
+## 面板皮**显式取**（`UiTheme.panel_stylebox()`）而不是靠主题解析：
+## 实测 `get_window().theme` 对 PanelContainer 的 panel 项不保证命中
+## （同一棵树里按钮吃到了皮、面板没吃到）。拿不到生图皮才退回纯色方块。
 static func make_window(title: String, size: Vector2 = Vector2(720, 520)) -> PanelContainer:
 	var win := PanelContainer.new()
 	win.custom_minimum_size = size
 	win.size = size
 	win.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.07, 0.09, 0.13, 0.96)
-	style.border_color = Color(0.35, 0.45, 0.58, 0.9)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
-	win.add_theme_stylebox_override("panel", style)
+	var sb := UiTheme.panel_stylebox()
+	if sb != null:
+		win.add_theme_stylebox_override("panel", sb)
+	else:
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.07, 0.09, 0.13, 0.96)
+		style.border_color = Color(0.35, 0.45, 0.58, 0.9)
+		style.set_border_width_all(2)
+		style.set_corner_radius_all(8)
+		win.add_theme_stylebox_override("panel", style)
 	var vbox := VBoxContainer.new()
 	vbox.name = "Body"
 	win.add_child(vbox)

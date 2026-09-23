@@ -39,6 +39,39 @@ func setup(p_world: GdWorld) -> void:
 	_biome_table = DataLoader.new().table("tiles", "BIOME_DEF", {})
 
 
+## 切换世界（进出虫巢副本用）——道具表跟着换，地表那份先**寄存**起来。
+##
+## ⚠️ 玩家报的「虫巢里矿生成的位置不对」就是这个漏了：副本是**另一个 World 对象**
+## （见 dungeon_flow.gd），而道具是按「世界坐标 + 本地块」生成/绘制的。
+## 不切的话，站在副本里看到的仍是**地表那一批道具**，按地表坐标画在巢壁和虚空上
+## —— 看着就是「矿长在墙里、位置全乱」。
+##
+## 出来时必须把寄存的那份**原样装回**：否则回去一看，采过的矿又全长回来了。
+## `harvested`（采集记录）**不参与寄存**，它是跨世界共用的。
+var _shelf: Dictionary = {}
+
+
+func switch_world(w: GdWorld) -> void:
+	if world == w or w == null:
+		return
+	if w.no_props or w.dungeon != null:
+		# 进副本：寄存地表道具（副本自己不长道具，表留空）
+		_shelf = { "world": world, "props": props, "chunks": chunks }
+		props = {}
+		chunks = {}
+		world = w
+		return
+	# 回地表：装回寄存的那份
+	if _shelf.get("world", null) == w:
+		props = _shelf.get("props", {})
+		chunks = _shelf.get("chunks", {})
+	else:
+		props = {}
+		chunks = {}
+	_shelf = {}
+	world = w
+
+
 func _biome_defs() -> Dictionary:
 	if _biome_table.is_empty():
 		_biome_table = DataLoader.new().table("tiles", "BIOME_DEF", {})

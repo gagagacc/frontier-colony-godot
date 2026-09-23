@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://wfyta6hwgplr"
-path="res://.godot/imported/tower_extra1.png-c70897796ce9ec5f1cebe8dc8a2e710c.ctex"
+uid="uid://kqi65lkl46eo"
+path="res://.godot/imported/prop_dataObelisk.png-2a93aae34e0273b118f1b322ed6aac0f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tower_extra1.png"
-dest_files=["res://.godot/imported/tower_extra1.png-c70897796ce9ec5f1cebe8dc8a2e710c.ctex"]
+source_file="res://assets/sprites/prop_dataObelisk.png"
+dest_files=["res://.godot/imported/prop_dataObelisk.png-2a93aae34e0273b118f1b322ed6aac0f.ctex"]
 
 [params]
 

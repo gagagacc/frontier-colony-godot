@@ -30,7 +30,7 @@ static func get_tex(name: String) -> Texture2D:
 	return null
 
 
-## 塔的贴图：**一塔一张**（由本地生图模型生成的像素素材，4×4 素材表切出来的）。
+## 塔的贴图：**一塔一张**（由本地生图模型生成的素材，4×4 素材表切出来的）。
 ##
 ## 找不到专属贴图时退回原来那两张 Kenney 通用炮塔 —— 所以少一两张也不会开天窗。
 static func tower_tex(id: String) -> Texture2D:
@@ -39,6 +39,41 @@ static func tower_tex(id: String) -> Texture2D:
 		return own
 	var heavy := ["mortar", "rail", "tesla", "cryo", "flameTower", "sniper", "magneticRail", "forceField"]
 	return get_tex("tower_heavy" if heavy.has(id) else "tower_light")
+
+
+## 炮管朝向标定表 —— 由 `tests/probe_barrel.gd` 从贴图里量出来，写在 `data/barrel_angles.json`。
+##
+## ## 为什么不是常量
+##
+## 贴图上的炮管是朝右上画的，画到场上要按瞄准角反向旋转。补偿量必须等于**该贴图里炮管的仰角**，
+## 否则炮管和目标差一个固定夹角（玩家反馈过「炮管和打击方向不一致」）。而生成素材的仰角
+## **每张都不一样**（实测 59.7°~69.9°，中位 64.6°），写死一个常量必然有几座塔是歪的。
+##
+## 值为 **-1** 表示「左右镜像对称、根本没有炮管」的贴图（力场穹顶、无人机平台）——
+## 这类不该跟着目标转，否则穹顶会原地打转。
+const DEFAULT_BARREL_OFFSET := PI * 0.33      # 标定表缺失时的兜底
+const NO_BARREL := -1.0
+
+static var _barrel: Dictionary = {}
+static var _barrel_loaded := false
+
+
+static func barrel_offset(id: String) -> float:
+	if not _barrel_loaded:
+		_barrel_loaded = true
+		var f := FileAccess.open("res://data/barrel_angles.json", FileAccess.READ)
+		if f != null:
+			var parsed = JSON.parse_string(f.get_as_text())
+			f.close()
+			if parsed is Dictionary:
+				_barrel = parsed
+	return float(_barrel.get("tower_" + id, DEFAULT_BARREL_OFFSET))
+
+
+## 给测试用：整张标定表
+static func barrel_table() -> Dictionary:
+	barrel_offset("__probe__")      # 触发一次加载
+	return _barrel
 
 
 ## 怪物的贴图：**16 只异星虫**（本地生图模型生成的像素素材），按种类哈希固定分配 ——
@@ -59,14 +94,24 @@ static func enemy_tex(kind: String) -> Texture2D:
 	return get_tex("enemy_%d" % (int(abs(kind.hash()) % 8) + 1))
 
 
-## 道具贴图：按道具 key 的前缀归类
+## 道具贴图：**一类一张**（本地生图模型出的素材，4×4 素材表切出来的）。
+##
+## 优先按道具类型 id 找专属贴图（`prop_ironNode.png` / `prop_crystalNode.png` …）；
+## 找不到才退回原来那三张 Kenney 通用件（箱子/地雷/草丛）——
+## 所以分批换素材时，没换的那些还是老样子，不会开天窗。
+##
+## 为什么值得一张一张换：原先 14 种道具**全靠程序化形状**（圆/三角/方块 + 底色）画，
+## 玩家看到的是一片色块（「补全这些色块」就是说的这个）。
 static func prop_tex(key: String) -> Texture2D:
+	var own := get_tex("prop_" + key)
+	if own != null:
+		return own
 	var k := key.to_lower()
-	if k.contains("crate") or k.contains("supply") or k.contains("wreck"):
+	if k.contains("crate") or k.contains("supply") or k.contains("wreck") or k.contains("cache"):
 		return get_tex("prop_crate_green" if k.hash() % 2 == 0 else "prop_crate_wood")
 	if k.contains("mine") or k.contains("spike"):
 		return get_tex("prop_mine")
-	if k.contains("tuft") or k.contains("grass") or k.contains("bush"):
+	if k.contains("tuft") or k.contains("grass") or k.contains("bush") or k.contains("moss"):
 		return get_tex("prop_grass_tuft")
 	return null
 
