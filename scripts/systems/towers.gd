@@ -237,12 +237,16 @@ func _draw() -> void:
 			draw_arc(pos, 26.0, 0, TAU, 24, Color(0.43, 0.9, 0.66, 0.5), 2.0)
 			draw_string(ThemeDB.fallback_font, pos + Vector2(-24, -30), "基座：免间隔",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.43, 0.9, 0.66))
-	# 建筑（基座等）
+	# 建筑（基座等）——有 struct_<id>.png 就贴图，否则灰色方块
 	for s in structures:
 		var p := Vector2(float(s["x"]), float(s["y"]))
-		draw_rect(Rect2(p - Vector2(19, 19), Vector2(38, 38)), Color("#6a7280"))
-		draw_rect(Rect2(p - Vector2(19, 19), Vector2(38, 38)), Color("#39414d"), false, 2.0)
-		draw_circle(p, 5.0, Color("#59d8ff"))
+		var stex := Sprites.get_tex("struct_" + String(s.get("type", "wall")))
+		if stex != null:
+			Sprites.draw_centered(self, stex, p, 44.0)
+		else:
+			draw_rect(Rect2(p - Vector2(19, 19), Vector2(38, 38)), Color("#6a7280"))
+			draw_rect(Rect2(p - Vector2(19, 19), Vector2(38, 38)), Color("#39414d"), false, 2.0)
+			draw_circle(p, 5.0, Color("#59d8ff"))
 	# 塔
 	for t in towers:
 		var p := Vector2(float(t["x"]), float(t["y"]))
@@ -262,15 +266,17 @@ func _draw() -> void:
 			# 有贴图：底座圆盘保留（能看出射程归属），炮塔贴图**跟着打击方向转**
 			draw_circle(p, 19.0, Color("#38414f"))
 			draw_circle(p, 19.0, Color("#6a7788") if not GdMath.truthy(t["onPlatform"]) else Color("#6ee7a8"), false, 2.0)
-			# ⚠️ 贴图必须旋转：素材上的炮管是朝「右上」画的（实测 60°~70°），
-			#    原样画上去就会「炮管朝右上、却在打左边」（玩家反馈）。
+			# ⚠️ 贴图必须旋转：素材上的炮管朝**画面正上方**（俯视图量出来正好 -90°），
+			#    原样画上去就会「炮管朝上、却在打右边」（玩家反馈）。
 			#    补偿量**逐塔查标定表**（data/barrel_angles.json，由 tests/probe_barrel.gd 量出），
-			#    因为每张素材的炮管仰角都不一样，写死一个常量有几座塔必然歪。
-			#    表里 -1 = 镜像对称、没有炮管的贴图（力场穹顶/无人机平台）→ 不旋转。
+			#    因为每张素材的朝向都不一样，写死一个常量必然有几座塔是歪的。
+			#    表里 -1 = 纯圆盘、没有炮管的贴图 → 不旋转（这批素材用不上，见 probe 注释）。
 			var off := Sprites.barrel_offset(String(t["type"]))
 			var rot := a + off if off >= 0.0 else 0.0
 			draw_set_transform(p, rot, Vector2.ONE)
-			Sprites.draw_centered(self, tex, Vector2.ZERO, 34.0)
+			# 贴图尺寸对着底座圆盘来：圆盘半径 19（直径 38），俯视图里圆底座约占贴图 85%，
+			# 所以画 44px 时贴图底座正好压住圆盘。早先画 34px 太小，俯视图细节糊成一团。
+			Sprites.draw_centered(self, tex, Vector2.ZERO, 44.0)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		else:
 			draw_circle(p, 19.0, Color("#38414f"))

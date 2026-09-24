@@ -47,24 +47,35 @@ static func draw_base(c: CanvasItem, b: Dictionary, time: float,
 		var k := float(i) / float(glow_steps)
 		c.draw_circle(pos, r * 1.8 * k, Color(GLOW.r, GLOW.g, GLOW.b, 0.035))
 
-	# ③ 平台（呼吸）
+	# ③ 平台（呼吸）——有俯视平台贴图就用贴图，没有画圆盘
 	var pulse := 1.0 + sin(time * 2.0) * 0.02
-	c.draw_circle(pos, r * 0.85 * pulse, PLATFORM)
-	c.draw_arc(pos, r * 0.85 * pulse, 0, TAU, 48, PLATFORM_EDGE, 3.0)
+	var plat_tex := Sprites.get_tex("base_platform")
+	if plat_tex != null:
+		Sprites.draw_centered(c, plat_tex, pos, r * 1.7 * pulse)
+	else:
+		c.draw_circle(pos, r * 0.85 * pulse, PLATFORM)
+		c.draw_arc(pos, r * 0.85 * pulse, 0, TAU, 48, PLATFORM_EDGE, 3.0)
 
-	# ④ 核心舱本体：圆角方块 + 天线 + 闪灯
-	var half := r * 0.45
-	c.draw_rect(Rect2(pos - Vector2(half, half), Vector2(half * 2.0, half * 2.0)),
-		CORE_FILL)
-	c.draw_rect(Rect2(pos - Vector2(half, half), Vector2(half * 2.0, half * 2.0)),
-		Color("#ff5f6d") if under_attack else CORE_EDGE, false, 3.0)
-	c.draw_line(pos + Vector2(0, -half), pos + Vector2(0, -r * 1.1), CORE_EDGE, 2.5)
-	var blink := (sin(time * 4.0) + 1.0) / 2.0
-	c.draw_circle(pos + Vector2(0, -r * 1.1), 4.5,
-		Color(1.0, 0.47, 0.31, 0.4 + blink * 0.6))
-	# 舱门与标识
-	c.draw_string(ThemeDB.fallback_font, pos + Vector2(-24, r * 0.72),
-		"核心舱", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, CORE_EDGE)
+	# ④ 核心舱本体：有贴图用贴图（俯视核心舱），否则圆角方块 + 天线 + 闪灯
+	var core_tex := Sprites.get_tex("base_core")
+	if core_tex != null:
+		Sprites.draw_centered(c, core_tex, pos, r * 0.95)
+		# 贴图上没有"挨打"提示，保底加一圈红描边
+		if under_attack:
+			c.draw_arc(pos, r * 0.5, 0, TAU, 40, Color(1.0, 0.37, 0.43, 0.75), 3.0)
+	else:
+		var half := r * 0.45
+		c.draw_rect(Rect2(pos - Vector2(half, half), Vector2(half * 2.0, half * 2.0)),
+			CORE_FILL)
+		c.draw_rect(Rect2(pos - Vector2(half, half), Vector2(half * 2.0, half * 2.0)),
+			Color("#ff5f6d") if under_attack else CORE_EDGE, false, 3.0)
+		c.draw_line(pos + Vector2(0, -half), pos + Vector2(0, -r * 1.1), CORE_EDGE, 2.5)
+		var blink := (sin(time * 4.0) + 1.0) / 2.0
+		c.draw_circle(pos + Vector2(0, -r * 1.1), 4.5,
+			Color(1.0, 0.47, 0.31, 0.4 + blink * 0.6))
+		# 舱门与标识
+		c.draw_string(ThemeDB.fallback_font, pos + Vector2(-24, r * 0.72),
+			"核心舱", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, CORE_EDGE)
 
 	# ⑤ 耐久条（带护盾段）
 	var frac := GdMath.clampf01(float(b.get("hp", 1.0)) / maxf(1.0, float(b.get("maxHp", 1.0))))
@@ -96,6 +107,11 @@ static func _dashed_circle(c: CanvasItem, center: Vector2, radius: float, col: C
 
 
 static func _draw_rubble(c: CanvasItem, pos: Vector2, r: float) -> void:
+	# 有生图废墟贴图就用它（俯视焦黑残骸 + 冒烟），否则程序化画几块黑斑
+	var tex := Sprites.get_tex("base_rubble")
+	if tex != null:
+		Sprites.draw_centered(c, tex, pos, r * 2.0)
+		return
 	c.draw_circle(pos, r, Color("#241f1e"))
 	c.draw_circle(pos + Vector2(-r * 0.3, r * 0.2), r * 0.4, Color("#3a3330"))
 	c.draw_circle(pos + Vector2(r * 0.35, -r * 0.15), r * 0.32, Color("#3a3330"))

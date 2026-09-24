@@ -55,6 +55,98 @@ static func slice(sheet_path: String, out_dir: String, names: Array,
 		"detected": boxes.size(), "boxes": boxes }
 
 
+## 固定网格切法：按 cols×rows 均分，每格再**裁到不透明内容**并缩放。
+##
+## ## 什么时候用它（而不是连通块检测）
+##
+## 生图模型偶尔会给出**排布非常规整**的表（每格图标大小、间距都匀），这时候固定网格反而更稳：
+## 连通块检测在图标底座互相挨着时会把**相邻两个粘成一块**（实测：俯视炮塔表每行前两个粘住，
+## 16 个图标只切出 11 块）。
+##
+## 判据很简单：先拼图看一眼，**图标都在各自格子里没越界** → 用固定网格；
+## 间距不匀、有图标跨界 → 用连通块检测。
+static func slice_grid(sheet_path: String, out_dir: String, names: Array,
+	cols: int, rows: int, out_size: int, flood_bg: float = 0.22, inset: int = 6) -> Dictionary:
+	if not FileAccess.file_exists(sheet_path):
+		return { "ok": false, "error": "找不到素材表：" + sheet_path }
+	var img := Image.load_from_file(sheet_path)
+	if img == null:
+		return { "ok": false, "error": "读不了这张图" }
+	img.convert(Image.FORMAT_RGBA8)
+	var cw := int(floor(float(img.get_width()) / float(cols)))
+	var ch := int(floor(float(img.get_height()) / float(rows)))
+	DirAccess.make_dir_recursive_absolute(out_dir)
+	var made: Array = []
+	var idx := 0
+	for ry in rows:
+		for rx in cols:
+			if idx >= names.size():
+				break
+			var name := String(names[idx]).strip_edges()
+			idx += 1
+			if name == "" or name == "-":
+				continue
+			# ⚠️ 内缩几像素再切：生图的图标常常**微微越格**，不内缩的话邻格的边角会粘进来，
+			#    裁到内容的包围盒后变成一条细长残影（实测巢穴表每格边缘都有）。见 --inset。
+			var cell := img.get_region(Rect2i(
+				rx * cw + inset, ry * ch + inset,
+				maxi(8, cw - inset * 2), maxi(8, ch - inset * 2)))
+			remove_background_flood(cell, flood_bg)
+			var trimmed := _trim(cell)
+			var out := _fit_square(trimmed, out_size)
+			out.save_png(out_dir.path_join(name + ".png"))
+			made.append(name)
+	return { "ok": true, "count": made.size(), "names": made, "detected": made.size(),
+		"cell": [cw, ch], "inset": inset}
+
+
+## 去背景（**边界泛洪版**）——只抠「与图像四边连通」的暗像素。
+##
+## ## 为什么比全局阈值好
+##
+## 全局阈值（`_remove_background`）只看像素本身够不够暗：
+## 生图给的背景常是**深蓝灰渐变**（比如 RGB 20,26,36 → 蓝通道已经超过阈值），
+## 于是贴图带着一块**深色方底**进了游戏（在灰色地板上看得一清二楚）。
+## 把阈值调高又会把图标内部的暗部（描边、炮口腔体）一起吃掉。
+##
+## 泛洪法两头兼顾：从四边往里灌，**只**把连通到边界的暗像素变透明；
+## 图标内部的暗色被亮部包围、灌不进去，自然保留。
+static func remove_background_flood(img: Image, threshold: float) -> void:
+	var w := img.get_width()
+	var h := img.get_height()
+	var dark := PackedByteArray()
+	dark.resize(w * h)
+	for y in h:
+		for x in w:
+			var p := img.get_pixel(x, y)
+			var mx := maxf(p.r, maxf(p.g, p.b))
+			dark[y * w + x] = 1 if mx <= threshold else 0
+	var seen := PackedByteArray()
+	seen.resize(w * h)
+	var queue: Array = []
+	for x in w:
+		for y in [0, h - 1]:
+			if dark[y * w + x] == 1 and seen[y * w + x] == 0:
+				seen[y * w + x] = 1
+				queue.append(Vector2i(x, y))
+	for y in h:
+		for x in [0, w - 1]:
+			if dark[y * w + x] == 1 and seen[y * w + x] == 0:
+				seen[y * w + x] = 1
+				queue.append(Vector2i(x, y))
+	while not queue.is_empty():
+		var p: Vector2i = queue.pop_back()
+		img.set_pixel(p.x, p.y, Color(0, 0, 0, 0))
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var nx: int = p.x + (d as Vector2i).x
+			var ny: int = p.y + (d as Vector2i).y
+			if nx < 0 or ny < 0 or nx >= w or ny >= h:
+				continue
+			if dark[ny * w + nx] == 1 and seen[ny * w + nx] == 0:
+				seen[ny * w + nx] = 1
+				queue.append(Vector2i(nx, ny))
+
+
 ## 把接近背景色的像素变透明。像素素材常是纯黑底，所以按「暗 + 低饱和」判断，
 ## 而不是死抠某个颜色 —— 模型给的黑底往往不是纯 0。
 static func _remove_background(img: Image, threshold: float) -> void:

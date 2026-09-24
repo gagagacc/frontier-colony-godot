@@ -76,15 +76,52 @@ static func barrel_table() -> Dictionary:
 	return _barrel
 
 
-## 怪物的贴图：**16 只异星虫**（本地生图模型生成的像素素材），按种类哈希固定分配 ——
+## 怪物的贴图 —— 玩家要的是「**像红警2坦克那样，移动时变形**」，所以：
+##
+## ## 一个物种三视图
+##
+## `enemy_<kind>_s.png`  正俯视（从正上方往下看，朝下/面向镜头走时用）
+## `enemy_<kind>_d.png`  侧 45 度俯视（背对镜头、朝上走时用）
+## `enemy_<kind>_f.png`  侧俯视（朝左右走时用，朝左靠左右镜像）
+##
+## ## 为什么不旋转贴图
+##
+## 有机生物整体旋转一眼就能看出「贴图被转过去了」（炮塔那种圆底座才适合旋转）。
+## 换视图 + 镜像才有「转身」的感觉，而且三视图本来就画着不同透视。
+##
+## 找不到三视图时**退回单张老素材**（按朝向旋转），再退回按种类哈希分配 —— 逐级兜底，
+## 换素材的过程中不会开天窗。
+const ENEMY_VIEWS := ["s", "d", "f"]        # 正俯视 / 侧45度 / 侧俯视
+
+
+static func enemy_view_tex(kind: String, view: int) -> Texture2D:
+	return get_tex("enemy_%s_%s" % [kind, ENEMY_VIEWS[clampi(view, 0, ENEMY_VIEWS.size() - 1)]])
+
+
+## 朝向角 → [视图序号, 是否左右镜像]
+##
+## 角度用 Godot 约定（y 轴向下）：0=右、PI/2=下（朝镜头）、-PI/2=上（背对镜头）、±PI=左。
+## 八向映射：朝下 → 正俯视；朝上 → 侧 45 度；朝左右 → 侧俯视（朝左镜像）。
+## 对角方向自然落到相邻视图上，看起来就是「半转身」。
+static func enemy_facing_view(angle: float) -> Array:
+	var deg := rad_to_deg(wrapf(angle, -PI, PI))
+	if deg >= 45.0 and deg < 135.0:
+		return [0, false]          # 朝下（面向镜头）：正俯视
+	if deg <= -45.0 and deg > -135.0:
+		return [1, false]          # 朝上（背对镜头）：侧 45 度俯视
+	if deg >= 135.0 or deg < -135.0:
+		return [2, true]           # 朝左：侧俯视 + 左右镜像
+	return [2, false]              # 朝右：侧俯视
+
+
+## 单张老贴图（没有三视图时的兜底）：按种类**首次出现顺序**发号 ——
 ## 同一种怪永远同一张，看起来才像「一个物种」。
-static var _kind_slot: Dictionary = {}      # kind -> 贴图序号（按首次出现顺序分配）
+static var _kind_slot: Dictionary = {}      # kind -> 贴图序号
 static var _next_slot := 1
 
 
 static func enemy_tex(kind: String) -> Texture2D:
 	# ⚠️ 不要用 hash % 16 分配：种类少的时候会撞（同屏的怪全是同一张）。
-	# 改成**按首次出现顺序**发号：同一物种永远同一张，且不同物种尽量不重复。
 	if not _kind_slot.has(kind):
 		_kind_slot[kind] = _next_slot
 		_next_slot = (_next_slot % 16) + 1

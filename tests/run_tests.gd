@@ -2112,6 +2112,23 @@ func _test_assets() -> void:
 				"表 %.3f rad · 实测 %.3f rad" % [cal, float(m["angle"])])
 	for i in range(1, 17):
 		_check(Sprites.get_tex("enemy_%d" % i) != null, "素材.怪物贴图存在：enemy_%d" % i)
+	# 怪物**三视图**：16 个物种 × 正俯视/侧45度/侧俯视 —— 缺一张就会退回单图旋转，
+	# 也就是玩家抱怨的「贴图被硬转过去」那种怪样子。
+	var mons: Dictionary = DataLoader.new().table("monsters", "MONSTER_DEF", {})
+	_check(mons.size() >= 16, "素材.怪物定义读到 16 种以上", str(mons.size()))
+	for k in mons.keys():
+		var kind0 := String(k)
+		for vi in 3:
+			_check(Sprites.enemy_view_tex(kind0, vi) != null,
+				"素材.怪物三视图存在：%s_%s" % [kind0, String(Sprites.ENEMY_VIEWS[vi])],
+				"缺失会退回单图旋转")
+	# 朝向 → 视图/镜像 的映射（八向：朝下=正俯视、朝上=背面、朝左右=侧视+镜像）
+	_eq("朝向.朝下=正俯视", Sprites.enemy_facing_view(PI / 2.0), [0, false])
+	_eq("朝向.朝上=背面", Sprites.enemy_facing_view(-PI / 2.0), [1, false])
+	_eq("朝向.朝右=侧视", Sprites.enemy_facing_view(0.0), [2, false])
+	_eq("朝向.朝左=侧视+镜像", Sprites.enemy_facing_view(PI), [2, true])
+	_eq("朝向.左下=正俯视扇区", Sprites.enemy_facing_view(deg_to_rad(120.0)), [0, false])
+	_eq("朝向.右上=背面扇区", Sprites.enemy_facing_view(deg_to_rad(-60.0)), [1, false])
 	# 道具：14 种可采集物**每种都要有专属贴图** —— 少一张就会退回程序化形状（圆/三角/方块），
 	# 也就是玩家说的「一片色块」。
 	var prop_defs: Dictionary = DataLoader.new().table("tiles", "PROP_DEF", {})
@@ -2120,6 +2137,19 @@ func _test_assets() -> void:
 		var ptype := String(k)
 		_check(Sprites.get_tex("prop_" + ptype) != null, "素材.道具有专属贴图：" + ptype,
 			"缺失会退回程序化色块")
+	# 建筑（防御工事 + 城镇建筑）：13 种，每种一张 struct_<id>.png。
+	# 城镇建筑原先在世界里**根本没被绘制**（只有面板列表），所以这里连"图层能画出来"一起守住。
+	var sdefs: Dictionary = DataLoader.new().table("towers", "STRUCTURE_DEF", {})
+	_check(sdefs.size() >= 13, "素材.建筑定义读到 13 种以上", str(sdefs.size()))
+	for k in sdefs.keys():
+		var sid := String(k)
+		_check(Sprites.get_tex("struct_" + sid) != null, "素材.建筑有专属贴图：" + sid,
+			"缺失会退回灰色方块")
+	# 巢穴 6 档 + 基地 3 件（核心舱 / 平台 / 废墟）
+	for i in range(1, 7):
+		_check(Sprites.get_tex("nest_%d" % i) != null, "素材.巢穴贴图存在：nest_%d" % i)
+	for nm in ["base_core", "base_platform", "base_rubble"]:
+		_check(Sprites.get_tex(nm) != null, "素材.基地贴图存在：" + nm)
 
 
 ## 进出副本时**道具系统必须跟着换世界** —— 玩家报的「虫巢里矿生成位置不对」就出在这儿。

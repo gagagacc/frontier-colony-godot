@@ -20,7 +20,19 @@
 extends SceneTree
 
 const OUT_PATH := "res://data/barrel_angles.json"
-const SYMMETRIC_IOU := 0.88
+
+## 「没有炮管」判据：最远点半径 / 等效半径 **低于**这个值才算纯圆盘（渲染时不旋转）。
+##
+## ⚠️ 实测这批俯视素材全部落在 **1.9~2.4** —— 圆底座 + 炮管/桅杆/旋翼都会把最远点推远，
+##    所以判据**基本不会触发**，11 座塔一律按量出的仰角旋转。
+##
+## 保留这个机制的两个理由：
+##   ① 以后真画出纯圆盘素材（比如地雷、力场核心）时不用改代码；
+##   ② 渲染端「-1 = 不旋转」的约定有个明确出处。
+##
+## 顺带一提：力场穹顶 / 无人机平台这类**旋转对称**的美术，转与不转看起来一样，
+## 按仰角转过去也不亏 —— 所以这里不需要为它们做特判。
+const ROUND_RATIO := 1.15
 
 
 func _initialize() -> void:
@@ -110,14 +122,31 @@ func _run(dir: String, filter: String, write: bool) -> void:
 				if l != r:
 					diff += 1
 		var iou := 1.0 if total == 0 else 1.0 - float(diff) / float(total)
-		var symmetric := iou >= SYMMETRIC_IOU
+		# 「有没有炮管」的**本质判据**：最远点半径 / 等效半径。
+		#
+		# ⚠️ 别再用镜像 IoU 判对称：换成俯视图之后圆底座让所有塔的 IoU 都涨到 0.90+，
+		#    cryo / 火焰塔被误判成「没有炮管 → 不旋转」——正是玩家抱怨的 bug 反过来。
+		#    圆盘：最远点≈等效半径（比值≈1.0）；圆盘 + 一根炮管：比值 1.6 以上。
+		var area := 0
+		var rmax := 0.0
+		for y in h:
+			for x in w:
+				if img.get_pixel(x, y).a > 0.15:
+					area += 1
+					var dd := Vector2(float(x) - bx, float(y) - by).length()
+					if dd > rmax:
+						rmax = dd
+		var r_eq := sqrt(float(area) / PI) if area > 0 else 1.0
+		var ratio := rmax / maxf(1.0, r_eq)
+		var symmetric := ratio < ROUND_RATIO
 		if symmetric:
 			table[key] = -1.0
 		else:
 			table[key] = snappedf(absf(deg_to_rad(ang)), 0.0001)
 			angles.append(absf(ang))
-		print("%-24s (%6.1f,%3d)  (%6.1f,%6.1f)  %7.1f  %6.3f%s" % [
-			f, muzzle_x, min_y, bx, by, ang, iou, "  ← 对称，不旋转" if symmetric else ""])
+		print("%-24s (%6.1f,%3d)  (%6.1f,%6.1f)  %7.1f  IoU %5.3f  最远/等效 %5.2f%s" % [
+			f, muzzle_x, min_y, bx, by, ang, iou, ratio,
+			"  ← 无炮管（圆盘），不旋转" if symmetric else ""])
 	print("BARREL_PROBE " + JSON.stringify({ "n": table.size(), "barrels": angles.size(), "table": table }))
 	if write:
 		var f2 := FileAccess.open(ProjectSettings.globalize_path(OUT_PATH), FileAccess.WRITE)

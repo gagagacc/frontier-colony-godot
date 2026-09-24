@@ -19,6 +19,7 @@ var dungeon_flow: DungeonFlow
 var props: Props
 var vehicle: Vehicle
 var town: Town
+var town_layer: TownLayer = null
 var settings: Settings
 var crafting: Crafting
 var tech_view: TechTreeView
@@ -61,6 +62,7 @@ var _fps := 0.0
 ## 或者一片黑；`get_viewport().get_texture().get_image()` 拿到的才是真实画面。
 var shot_path := ""
 var shot_frames := 90
+var auto_town := 0
 var move_hint := Vector2.ZERO
 ## 自动截图时是否连续开火（用来截到飞行中的弹丸）
 var auto_fire := 0
@@ -122,6 +124,8 @@ func _parse_cli() -> void:
 			boss_view = a.substr(11).to_int()
 		elif a.begins_with("--panel="):
 			auto_panel = a.substr(8).to_int()
+		elif a.begins_with("--town="):
+			auto_town = a.substr(7).to_int()
 		elif a.begins_with("--saveload="):
 			auto_saveload = a.substr(11).to_int()
 		elif a.begins_with("--menu="):
@@ -222,7 +226,6 @@ func _build_world_systems() -> void:
 	nest_layer.name = "Nests"
 	nest_layer.setup(world)
 	add_child(nest_layer)
-
 	player = $Player
 	var start: Dictionary = world.base_site if world.base_site != null else { "x": float(Cfg.WORLD_PX) / 2.0, "y": float(Cfg.WORLD_PX) / 2.0 }
 	var spawn: Dictionary = world.find_open_spot(float(start["x"]), float(start["y"]), 200.0)
@@ -334,6 +337,16 @@ func _build_world_systems() -> void:
 	town = Town.new(player_stats, tech.unlocked)
 	town.resources = { "food": 60.0, "metal": 400.0, "gold": 600.0, "parts": 60.0, "crystal": 20.0, "water": 40.0 }
 	town.bases = towers.bases
+	# 城镇建筑的绘制层：原先 town.buildings 在世界里**完全没有被画出来**（只有面板里有列表），
+	# 玩家掏材料盖的房子地图上看不见。town_layer 用 struct_<type>.png 画，缺贴图就程序化画房子。
+	town_layer = TownLayer.new()
+	town_layer.name = "Town"
+	town_layer.setup(town, player)
+	add_child(town_layer)
+	# --town=N：截图/联调用，免费盖 N 座城镇建筑（城镇建筑原先在世界里根本不显示，
+	# 没有这个开关就没法用截图验证渲染）
+	if auto_town > 0:
+		_debug_place_town(auto_town)
 	crafting = Crafting.new()
 	hotbar = Hotbar.new()
 	# 开局物品：角色的 startItem（HTML 版每个角色都带一点消耗品）
@@ -1401,6 +1414,45 @@ func _fill_town(body: Node) -> void:
 		body.add_child(row)
 
 
+## 城镇建筑落成位置（--town=N 的联调开关用）——绕着基地摆一圈
+func _debug_place_town(n: int) -> void:
+	var defs: Dictionary = DataLoader.new().table("towers", "STRUCTURE_DEF", {})
+	var kinds: Array = []
+	for k in defs.keys():
+		var d: Dictionary = defs[k]
+		# 只摆"城镇建筑"，防御工事（墙/大门/炮塔基座）留给建造面板
+		if String(d.get("kind", "")) == "defense":
+			continue
+		kinds.append(String(k))
+	# 材料给足，否则 place_building 会因为资源不足直接返回空
+	town.resources["metal"] = 99999.0
+	town.resources["gold"] = 99999.0
+	town.resources["parts"] = 9999.0
+	town.resources["crystal"] = 9999.0
+	var base: Dictionary = towers.bases[0] if not towers.bases.is_empty() else {
+		"x": player.position.x, "y": player.position.y }
+	var placed := 0
+	for i in mini(n, kinds.size()):
+		var a := TAU * float(i) / float(maxi(1, mini(n, kinds.size())))
+		var want := Vector2(float(base["x"]) + cos(a) * 150.0, float(base["y"]) + sin(a) * 150.0)
+		var spot := world.find_open_spot(want.x, want.y, 160.0)
+		# ⚠️ 这里**绕过 place_building 的解锁校验**直接登记：开局大部分城镇建筑还没解锁，
+		#    走正常接口会一座都放不下（第一次就是这么空的）。截图/联调专用，不影响正式流程。
+		town.buildings.append({
+			"id": "dbg%d" % i, "type": String(kinds[i]),
+			"x": float(spot["x"]), "y": float(spot["y"]),
+			"workers": 0, "hp": 300.0, "maxHp": 300.0,
+		})
+		placed += 1
+	print("[godot] 联调：城镇建筑 %d 座（%s）" % [placed, ",".join(kinds.slice(0, placed))])
+	# 顺便给一点资源：HUD 资源条的 0 值默认不显示，不给东西的话截图里只有一句「按 E 采集」，
+	# 图标根本验证不到。
+	props_layer.resources = {
+		"gold": 128, "metal": 64, "crystal": 12, "food": 30, "parts": 18, "research": 6,
+		"wood": 22, "fiber": 9, "water": 14, "sulfur": 4, "chitin": 7, "biomass": 5,
+	}
+
+
 ## 在基地旁边找块空地盖（城镇建筑必须建在基地范围内）
 func _place_town_building(type: String) -> void:
 	var base: Dictionary = towers.bases[0] if not towers.bases.is_empty() else {
@@ -1770,7 +1822,7 @@ var hud_wave: Label = null
 ## HUD 补全：天数/局势/资源条/距离/快捷栏（对齐 HTML 版）
 var hud_day: Label = null
 var hud_situation: Label = null
-var hud_res: Label = null
+var hud_res: ResourceBar = null
 var hud_dist: Label = null
 var hud_hotbar: Array = []
 var run_time := 0.0
@@ -1839,13 +1891,11 @@ func _build_hud() -> void:
 	hud_situation.add_theme_color_override("font_color", Color("#ffba4c"))
 	hud_root.add_child(hud_situation)
 
-	# 右上：完整资源条
-	hud_res = Label.new()
+	# 右上：完整资源条（**图标 + 数值**，见 ResourceBar；图标缺失自动退回文字符号）
+	hud_res = ResourceBar.new()
 	hud_res.position = Vector2(16, 80)
-	hud_res.custom_minimum_size = Vector2(1000, 0)
-	hud_res.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	hud_res.add_theme_font_size_override("font_size", 13)
-	hud_res.add_theme_color_override("font_color", Color("#e8eef7"))
+	hud_res.custom_minimum_size = Vector2(1000, 22)
+	hud_res.size = Vector2(1000, 22)
 	hud_root.add_child(hud_res)
 
 	# 顶部细条：距离指示
@@ -1955,7 +2005,7 @@ func _update_hud() -> void:
 			player_stats.stat("sightBonus"), world.planet_index)
 
 	if hud_res != null:
-		hud_res.text = HudModel.resource_bar(props_layer.resources)
+		hud_res.set_values(props_layer.resources)
 	if hud_dist != null:
 		hud_dist.text = HudModel.distance_line(
 			player.position.distance_to(bases_pos),

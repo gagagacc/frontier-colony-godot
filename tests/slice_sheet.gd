@@ -19,8 +19,17 @@ func _initialize() -> void:
 		names[i] = String(names[i]).strip_edges()
 	var bg := float(args.get("bg", "0.12"))       # 去背景阈值（0 = 不去）
 	var size := int(args.get("size", "64"))
+	var grid := int(args.get("grid", "0"))        # >1 = 固定网格切（cols=rows=grid），见 slice_grid()
+	var cols := int(args.get("cols", "0"))        # 非方阵网格（如 2x3 的巢穴表）
+	var rows := int(args.get("rows", "0"))
 
-	var res: Dictionary = SheetSlicer.slice(sheet, out_dir, names, bg, size)
+	var res: Dictionary
+	if cols > 1 and rows > 1:
+		res = SheetSlicer.slice_grid(sheet, out_dir, names, cols, rows, size)
+	elif grid > 1:
+		res = SheetSlicer.slice_grid(sheet, out_dir, names, grid, grid, size)
+	else:
+		res = SheetSlicer.slice(sheet, out_dir, names, bg, size)
 	if not res.get("ok", false):
 		print("SLICE_FAIL " + String(res.get("error", "?")))
 		quit(1)

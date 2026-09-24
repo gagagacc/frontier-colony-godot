@@ -425,27 +425,40 @@ func _draw() -> void:
 		if GdMath.truthy(e.get("elite", false)):
 			base = base.lerp(Color("#ffba4c"), 0.35)
 		var r := float(e["r"])
-		var tex := Sprites.enemy_tex(String(def.get("id", e.get("kind", "?"))))
+		var kind := String(def.get("id", e.get("kind", "?")))
+		var pick := Sprites.enemy_facing_view(a)
+		var tex := Sprites.enemy_view_tex(kind, int(pick[0]))
+		var tint := Color(1, 1, 1, 1) if not GdMath.truthy(e.get("elite", false)) else Color(1.0, 0.85, 0.6)
 		# 影子（贴图和色块都画）
 		draw_circle(pos + Vector2(0, r * 0.25), r * 1.05, Color(0, 0, 0, 0.22))
 		if tex != null:
-			# 有贴图就贴图：按世界里的半径缩放（贴图里朝向是"上"，所以旋转 90° 对齐朝向）
+			# 三视图：**不旋转**，按朝向换视图 + 朝左时左右镜像（玩家要的「红警2坦克」那种变形）
 			var s := tex.get_size()
-			var k := r * 2.4 / maxf(s.x, s.y)
-			var sz := s * k
-			draw_set_transform(pos, a + PI / 2.0, Vector2.ONE)
-			draw_texture_rect(tex, Rect2(-sz / 2.0, sz), false,
-				Color(1, 1, 1, 1) if not GdMath.truthy(e.get("elite", false)) else Color(1.0, 0.85, 0.6))
+			var k2 := r * 2.6 / maxf(s.x, s.y)
+			var sz := s * k2
+			var flip := bool(pick[1])
+			draw_set_transform(pos, 0.0, Vector2(-1.0, 1.0) if flip else Vector2.ONE)
+			draw_texture_rect(tex, Rect2(-sz / 2.0, sz), false, tint)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		else:
-			# 没贴图退回程序化：身体 + 朝向楔形（与 JS 的画法同构）
-			draw_circle(pos, r, base)
-			draw_circle(pos, r * 0.62, base.lightened(0.25))
-			draw_colored_polygon(PackedVector2Array([
-				pos + Vector2(cos(a), sin(a)) * (r + 5.0),
-				pos + Vector2(cos(a + 2.5), sin(a + 2.5)) * (r * 0.8),
-				pos + Vector2(cos(a - 2.5), sin(a - 2.5)) * (r * 0.8),
-			]), base.darkened(0.25))
+			var single := Sprites.enemy_tex(kind)
+			if single != null:
+				# 老单图兜底：贴图里朝向是"上"，所以旋转 90° 对齐朝向
+				var s2 := single.get_size()
+				var k3 := r * 2.4 / maxf(s2.x, s2.y)
+				var sz2 := s2 * k3
+				draw_set_transform(pos, a + PI / 2.0, Vector2.ONE)
+				draw_texture_rect(single, Rect2(-sz2 / 2.0, sz2), false, tint)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			else:
+				# 没贴图退回程序化：身体 + 朝向楔形（与 JS 的画法同构）
+				draw_circle(pos, r, base)
+				draw_circle(pos, r * 0.62, base.lightened(0.25))
+				draw_colored_polygon(PackedVector2Array([
+					pos + Vector2(cos(a), sin(a)) * (r + 5.0),
+					pos + Vector2(cos(a + 2.5), sin(a + 2.5)) * (r * 0.8),
+					pos + Vector2(cos(a - 2.5), sin(a - 2.5)) * (r * 0.8),
+				]), base.darkened(0.25))
 		if float(e.get("hitFlash", 0.0)) > 0.0:
 			draw_circle(pos, r * 1.1, Color(1, 1, 1, float(e["hitFlash"]) * 0.5))
 		var frac := clampf(float(e["hp"]) / maxf(1.0, float(e["hpMax"])), 0.0, 1.0)

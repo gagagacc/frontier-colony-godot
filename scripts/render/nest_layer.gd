@@ -50,21 +50,28 @@ func _draw_nest(pos: Vector2, r: float, tier: int, id: String) -> void:
 		var k := float(i) / 6.0
 		draw_circle(pos, r * 2.4 * k, Color(0.7, 0.24, 0.2, 0.035))
 
-	# ② 外翻的土堆：不规则环
-	draw_colored_polygon(_wobble_ring(pos, r * 1.34, 0.12, seedv, 0.0), Color("#4a2a22"))
-	# ③ 向内塌陷（多层越来越暗）
-	draw_colored_polygon(_wobble_ring(pos, r * 1.05, 0.1, seedv, 1.3), Color("#3a2019"))
-	draw_colored_polygon(_wobble_ring(pos, r * 0.78, 0.08, seedv, 2.1), Color("#2a1611"))
-	# ④ 洞底的黑
-	draw_colored_polygon(_wobble_ring(pos, r * 0.52, 0.06, seedv, 3.0), Color("#120a08"))
-
-	# 洞口边缘的抓痕（几道短线）
-	for i in 4:
-		var a := seedv * 6.0 + float(i) * 1.7
-		var r0 := r * 1.15
-		var r1 := r * 1.5
-		draw_line(pos + Vector2(cos(a), sin(a)) * r0, pos + Vector2(cos(a), sin(a)) * r1,
-			Color(0.55, 0.35, 0.28, 0.7), 2.0)
+	# ② 巢穴本体 —— 有生图贴图就用贴图（俯视虫巢），否则走程序化的土堆 + 塌陷 + 洞底
+	#
+	# 贴图按等级取：`nest_1..nest_5`（等级越高越"长开"），没有对应等级就退到已有档位里最近的一张。
+	# 不管有没有贴图，光晕（①）、呼吸巢核、靠近提示（⑤）都保留 —— 那些是**玩法信息**，不是装饰。
+	var nest_tex := _nest_tex(tier)
+	if nest_tex != null:
+		Sprites.draw_centered(self, nest_tex, pos, r * 2.7)
+	else:
+		# 外翻的土堆：不规则环
+		draw_colored_polygon(_wobble_ring(pos, r * 1.34, 0.12, seedv, 0.0), Color("#4a2a22"))
+		# 向内塌陷（多层越来越暗）
+		draw_colored_polygon(_wobble_ring(pos, r * 1.05, 0.1, seedv, 1.3), Color("#3a2019"))
+		draw_colored_polygon(_wobble_ring(pos, r * 0.78, 0.08, seedv, 2.1), Color("#2a1611"))
+		# 洞底的黑
+		draw_colored_polygon(_wobble_ring(pos, r * 0.52, 0.06, seedv, 3.0), Color("#120a08"))
+		# 洞口边缘的抓痕（几道短线）
+		for i in 4:
+			var a := seedv * 6.0 + float(i) * 1.7
+			var r0 := r * 1.15
+			var r1 := r * 1.5
+			draw_line(pos + Vector2(cos(a), sin(a)) * r0, pos + Vector2(cos(a), sin(a)) * r1,
+				Color(0.55, 0.35, 0.28, 0.7), 2.0)
 
 	# 呼吸的巢核
 	var pulse := 0.5 + sin(time * 2.0 + seedv * 5.0) * 0.5
@@ -83,6 +90,29 @@ func _draw_nest(pos: Vector2, r: float, tier: int, id: String) -> void:
 		# 远处只给个小铭牌，避免刷屏
 		draw_string(ThemeDB.fallback_font, pos + Vector2(-30, -r * 1.6),
 			"%d 级虫巢" % tier, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.75, 0.62, 0.55, 0.75))
+
+
+## 巢穴贴图：按等级选档（1~6 档），找不到就退回**已有档位里最接近**的一张；
+## 一张都没有就返回 null（调用方走程序化绘制）。
+##
+## 档位映射：10 级巢穴 → 6 张素材，用 ceil(t*0.6)（1→1、3→2、5→3、6→4、8→5、10→6），
+## 让每张素材都对应一段等级，而不是前几张挤在一起。
+const NEST_TIERS := 6
+
+
+func _nest_tex(tier: int) -> Texture2D:
+	var t := clampi(tier, 1, 10)
+	var want := clampi(int(ceil(float(t) * 0.6)), 1, NEST_TIERS)
+	var tex := Sprites.get_tex("nest_%d" % want)
+	if tex != null:
+		return tex
+	for d in range(1, NEST_TIERS + 1):
+		for cand in [want - d, want + d]:
+			if cand >= 1 and cand <= NEST_TIERS:
+				tex = Sprites.get_tex("nest_%d" % cand)
+				if tex != null:
+					return tex
+	return null
 
 
 ## 不规则环（用巢穴 id 做种子，形状稳定）

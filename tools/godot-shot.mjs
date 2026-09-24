@@ -35,6 +35,7 @@ const MENU = arg('menu', '0');
 const FLOW = arg('flow', '');
 const LANDING = arg('landing', '');
 const TIME = arg('time', '');
+const TOWN = arg('town', '');
 
 const GODOT = [
   join(ROOT, 'tools', 'godot-dl', 'exe', 'Godot_v4.4.1-stable_win64_console.exe'),
@@ -57,6 +58,7 @@ args.push(`--menu=${MENU}`);
 if (FLOW) args.push(`--flow=${FLOW}`);
 if (LANDING) args.push(`--landing=${LANDING}`);
 if (TIME) args.push(`--time=${TIME}`);
+if (TOWN) args.push(`--town=${TOWN}`);
 
 console.log('▶ 启动 Godot 截图…');
 // 注意：Godot 退出码非 0 时 execFileSync 会抛，但**截图可能已经成功**，
