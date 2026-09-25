@@ -1,4 +1,4 @@
-## 游戏主场景（阶段 4：能走能看）。
+﻿## 游戏主场景（阶段 4：能走能看）。
 ##
 ## 流程：生成世界 → 烘地块图集 → 铺地形 → 放玩家 → 相机跟随 → 小地图 + HUD。
 ## 世界生成目前是同步的（GDScript 实测约 5 秒），阶段 12 会改成
@@ -80,6 +80,10 @@ var auto_panel := -1
 var auto_menu := 1
 ## 自动截图：直接跳到前置界面的某一屏（0 标题 1 模式 2 角色 3 星球 5 设置）
 var auto_flow := -1
+## `--laya=1`：Laya 托管模式（本地决策模型来玩）
+var auto_laya := 0
+var _laya_probed := false
+var laya_bot: LayaBot = null
 ## 截图用：生成世界后直接停在「选降落点」那一屏
 var auto_landing := 0
 ## 截图用：把本局时间直接推到某一刻（看昼夜光照）
@@ -135,6 +139,11 @@ func _parse_cli() -> void:
 			show_menu = auto_menu == 1
 		elif a.begins_with("--flow="):
 			auto_flow = a.substr(7).to_int()
+		elif a.begins_with("--laya="):
+			# Laya 托管：让本地 Laya 决策模型（127.0.0.1:8199）来玩这一局
+			auto_laya = a.substr(7).to_int()
+			show_menu = false
+			auto_landing = 0
 		elif a.begins_with("--landing="):
 			auto_landing = a.substr(10).to_int()
 		elif a.begins_with("--time="):
@@ -142,6 +151,8 @@ func _parse_cli() -> void:
 	if seed_text == "" or seed_text == "frontier-golden-a":
 		if shot_path == "":
 			seed_text = "frontier-%d" % (Time.get_ticks_msec() % 100000)
+	print("[godot] CLI 解析：laya=%d landing=%d flow=%d menu=%d frames=%d 实例=%d" % [
+		auto_laya, auto_landing, auto_flow, auto_menu, shot_frames, get_instance_id()])
 
 
 func _ready() -> void:
@@ -404,9 +415,22 @@ func _build_world_systems() -> void:
 		front_end = null
 	if hud_root != null:
 		hud_root.visible = true
-	print("[godot] 落地 —— 模式 %s · 角色 %s" % [
-		String(start_params_static.get("mode", "frontier")),
+	print("[godot] 落地 —— 模式 %s · 角色 %s" % [		String(start_params_static.get("mode", "frontier")),
 		String(start_params_static.get("character", "engineer"))])
+
+
+## Laya 托管：让本地决策模型（127.0.0.1:8199）来玩这一局。
+##
+## 惰性创建（每帧检查一次 `auto_laya`）：放在唯一必被执行的地方，避免"初始化写在某个
+## 分支尾部、结果没跑到"这类问题 —— 这一批就栽过一次。
+func _start_laya_bot() -> void:
+	laya_bot = LayaBot.new()
+	laya_bot.name = "LayaBot"
+	add_child(laya_bot)
+	laya_bot.game = self
+	laya_bot.enabled = true
+	print("[laya] 托管模式启动 —— 决策模型 http://127.0.0.1:8199/v1/systemone · 每 %.1f 秒一次决策"
+		% LayaBot.DECIDE_INTERVAL)
 
 
 ## 玩家属性：角色基础 + 一点起始科技（阶段 10 会接上真正的科技树与装备）
@@ -463,6 +487,19 @@ func _process(delta: float) -> void:
 		run_time += world_delta
 		enemies.update(world_delta)
 		projectiles.update(world_delta)
+		# Laya 托管：决策节流与操作执行都在这里（暂停时自然不推进）
+		#
+		# 惰性初始化放在**每帧**：`--laya=1` 时第一帧就把机器人挂上。
+		# （之前写在 `_build_world_systems()` 尾部，实测那几句没被执行到 —— 放在每帧里
+		#   既躲开那个坑，也顺便支持以后中途开启托管。）
+		if auto_laya == 1 and laya_bot == null:
+			_start_laya_bot()
+		if laya_bot != null:
+			laya_bot.tick(world_delta)
+		if not _laya_probed:
+			_laya_probed = true
+			print("[laya] _process 探针 auto_laya=%d 实例=%d bot=%s" % [
+				auto_laya, get_instance_id(), str(laya_bot != null)])
 		director.update(delta)
 		_update_waves(delta)
 		var mouse := get_global_mouse_position()
@@ -1886,6 +1923,8 @@ var hud_hp_label: Label = null
 var hud_left: Label = null
 var hud_right: Label = null
 var hud_wave: Label = null
+## Laya 托管时显示当前意图/危险度/延迟的那一行
+var hud_laya: Label = null
 ## HUD 补全：天数/局势/资源条/距离/快捷栏（对齐 HTML 版）
 var hud_day: Label = null
 var hud_situation: Label = null
@@ -1958,6 +1997,15 @@ func _build_hud() -> void:
 	hud_wave.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud_wave.add_theme_font_size_override("font_size", 16)
 	_hud_card(hud_wave, Vector2(470, 4))
+
+	# Laya 托管时的「它在想什么」那一行（没开托管就隐藏）
+	hud_laya = Label.new()
+	hud_laya.custom_minimum_size = Vector2(420, 0)
+	hud_laya.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hud_laya.add_theme_font_size_override("font_size", 13)
+	hud_laya.add_theme_color_override("font_color", Color("#ffd479"))
+	hud_laya.visible = false
+	_hud_card(hud_laya, Vector2(430, 36))
 
 	# ---- HUD 补全：对齐 HTML 版的信息量 ----
 	# 左上：天数 / 昼夜 / 时刻
@@ -2070,6 +2118,10 @@ func _update_hud() -> void:
 	hud_wave.add_theme_color_override("font_color", HudModel.wave_color(director.state, director.hunt_mode))
 
 	# ---- HUD 补全：对齐 HTML 版的信息量（天数 / 局势 / 资源条 / 距离 / 快捷栏）----
+	if hud_laya != null:
+		hud_laya.visible = laya_bot != null and laya_bot.enabled
+		if hud_laya.visible:
+			hud_laya.text = laya_bot.hud_line()
 	if hud_day != null:
 		hud_day.text = HudModel.day_text(run_time, int(run_time / 240.0) + 1)
 	if hud_situation != null:

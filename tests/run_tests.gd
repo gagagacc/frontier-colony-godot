@@ -73,6 +73,7 @@ func _initialize() -> void:
 	_test_hud()
 	_test_steam()
 	_test_assets()
+	_test_boot_compiles()
 	_test_world_switch()
 	_test_planet_diff(cases.get("planetDiff", {}))
 	_test_respawn_in_dungeon()
@@ -2714,6 +2715,30 @@ func _test_repair(c: Dictionary) -> void:
 ##   1. 初始一定停在标题屏（不是「已经开了一局，只是盖了层菜单」）；
 ##   2. 每一屏的推进都会把选择**写进 start_params()**（模式/角色/星球/种子）；
 ##   3. 参数与数据表一致（塔防模式 nestScale=0、有/无角色、阵地半径…）。
+## 启动编译闸门：**每个被引用的脚本都能编译**。
+##
+## ## 为什么单独立一条
+##
+## 这一批吃过两次亏：`class_name` 没进全局类缓存、以及「从 Variant 推断类型」被当成错误 ——
+## 两种都只在**真正加载 Game 场景**时才暴露，而当时的断言全绿（测试没实例化 Game）。
+## 这里把 Game / Main 两个场景 `instantiate()` 一遍：脚本编译不过的话，节点上的 script 会是 null。
+func _test_boot_compiles() -> void:
+	for path in ["res://scenes/Game.tscn", "res://scenes/Main.tscn"]:
+		_check(ResourceLoader.exists(path), "启动.场景存在：" + path)
+		var packed = load(path)
+		_check(packed != null, "启动.场景能加载：" + path)
+		if packed == null:
+			continue
+		var node = (packed as PackedScene).instantiate()
+		_check(node != null, "启动.场景能实例化：" + path)
+		if node == null:
+			continue
+		_check(node.get_script() != null, "启动.场景脚本编译通过：" + path,
+			"编译失败时 get_script() 为 null（class_name 未注册 / Variant 推断被当错误…）")
+		node.free()
+	_check(load("res://scripts/systems/laya_bot.gd") != null, "启动.LayaBot 脚本可加载")
+
+
 func _test_front_end() -> void:
 	var fe := FrontEnd.new()
 	_eq("frontEnd.初始停在标题屏", fe.screen, FrontEnd.Screen.TITLE)

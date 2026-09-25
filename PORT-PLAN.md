@@ -1,4 +1,4 @@
-# Godot 移植计划（JS → Godot 4.4 / GDScript）
+﻿# Godot 移植计划（JS → Godot 4.4 / GDScript）
 
 > 目标：把《开拓者：殖民地》从 JS + Canvas 完整搬到 Godot，**同一种子生成同一张地图**。
 > JS 版冻结但保持可运行（绿色版仍可发布），所有新功能只在 `godot/` 里做。
@@ -1907,3 +1907,58 @@ godot/
 2. **实验科技三选一**的文案生成（`score` 题型对候选打分）。
 3. **角色台词/简报**文本生成。
 不建议用它驱动战斗 AI：每帧/每秒一次推理的延迟与稳定性都不划算。
+
+---
+
+# 2026-09-25 · Laya 托管模式（让决策模型来玩游戏）
+
+## 1. 接口与分工
+
+Laya 是**类型化决策路由器**：`POST http://127.0.0.1:8199/v1/systemone`，body 是
+`{ "state": "一段文本局势", "questions": { key: { type: choice|score|noul, instructions, criteria } } }`，
+返回 `{ "answers": { key: { choice|score|noul, confidence } }, "routing": {...} }`。
+
+**实测单次推理 ≈150 ms**（本机；一局 118 次决策平均 155 ms，最快 136 ms）。据此分工：
+
+- **Laya 做高层决策**（这一轮干什么：交火 / 撤退 / 拆巢 / 采集 / 建造，建哪种塔）；
+- **本机人机系统做执行**（走位、瞄准、开火、落塔）—— 复用手感已经调好的现有代码。
+
+实现：`scripts/systems/laya_bot.gd`（`class_name LayaBot`），`Game` 每帧
+`laya_bot.tick(world_delta)`；玩家侧只加了一个 `bot_dir`（非零就覆盖键盘输入，
+走位 / 碰撞 / 冲刺仍走同一条路径）。命令行 `--laya=1`；HUD 顶部第二行实时显示
+`Laya ● <意图> · 危险 x.xx · 建造 <塔> · NNN ms（建议撤退）`。
+
+## 2. 实测结果（60 秒一局，118 次决策）
+
+- 决策频率 0.8 s 一次，**平均 155 ms / 次**，无失败请求；
+- **确实在玩**：会走位、会开火、会**自己造塔**（截图里基地右侧三座塔就是它下令落的）；
+- 截图证据：`tools/shots/laya-session5.png`、`laya-play.png`。
+
+## 3. 决策质量：**不好，而且原因在模型侧**
+
+三轮提示词迭代，每轮都用一个真问题换来一点改善：
+
+| 版本 | 现象 | 原因 |
+| --- | --- | --- |
+| v1 · `choice`「这一轮最该做什么」 | **94/94 次全选 retreat** | 状态文本里写了「当前意图：retreat」→ 模型只做自我确认 |
+| v2 · 去掉当前意图 + 加强制换事提醒 | build×117 / 118，且 `build=none` **自相矛盾** | 它在**独立地挑每个问题里最显著的选项**，没在读战报 |
+| v3 · 拆成 5 个是非题，取概率最高的「是」 | 意图会切换了（build×98 / engage×19 / retreat×1） | 但**票数全是 0.97**（ret0.97 eng0.97 bui0.97）→ 模型饱和，等于没区分 |
+
+v3 的票数饱和与启动警告一致：**这份 checkpoint 的 temperature 无效**
+（`laya: this checkpoint ships invalid temperatures … treat confidence as uncalibrated`），
+置信度不可用、选项之间几乎不区分。它擅长的是「这封邮件该给哪个部门」这类**分类**，
+不是「读战报做取舍」。
+
+**结论**：接口这一侧已经打通且可复用 —— `LayaBot` 只依赖
+`state + 类型化问题` 这个契约，**换一个更合适的模型（同一 HTTP 契约）就是改一行地址**。
+要提升棋力得从模型侧换，而不是继续堆提示词。
+
+## 4. 顺带修的坑（都已进断言）
+
+- **`class_name` 必须先进全局类缓存**：新加的 `LayaBot` 没跑 `--import` 时，
+  `Game` 解析直接报 `Could not find type "LayaBot"` —— 而当时测试**全绿**。
+- **「从 Variant 推断类型」在本项目是错误**（warning as error）：`game` 是无类型的
+  （为了能注入测试替身），所以 `var x := game.foo` 一律编译失败，必须写 `=`。
+- **新增启动编译闸门**（`_test_boot_compiles`，9 条断言）：把 `Game.tscn` / `Main.tscn`
+  `instantiate()` 一遍并检查 `get_script() != null` —— 上面两类错误以后都会在这里红。
+- Laya 托管初始化**放在每帧惰性执行**（`_start_laya_bot()`），不再写在某个函数尾部。

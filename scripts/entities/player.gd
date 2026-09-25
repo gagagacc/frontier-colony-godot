@@ -59,6 +59,10 @@ func _physics_process(delta: float) -> void:
 		Input.get_axis("move_up", "move_down"))
 	if input.length() > 1.0:
 		input = input.normalized()
+	# Laya 托管：机器人写的方向**覆盖键盘输入**（走位/碰撞/冲刺全走同一条路径，
+	# 所以"谁在开这个角色"对表现是一致的）
+	if bot_dir.length() > 0.01:
+		input = bot_dir.normalized()
 
 	sprinting = Input.is_key_pressed(KEY_SHIFT) and stamina > 1.0
 	# 速度/体力/闪避全部走 PlayerMove（数值来自 data/config.json 的 PLAYER，不再是手抄常量）
@@ -211,6 +215,8 @@ const RESPAWN_INVULN := 3.0
 signal died
 ## 开火（参数：枪口位置、是否重武器）—— 用来接光照与音效
 signal fired(pos: Vector2, heavy: bool)
+## Laya 托管时由机器人写入的移动方向（非零就覆盖键盘输入）
+var bot_dir := Vector2.ZERO
 ## 核心舱已毁时死亡 → 不再复活（这一局结束）。由 Game 弹结算/主菜单。
 signal final_death
 ## 基地没了之后置 true：`respawn()` 不再执行救援

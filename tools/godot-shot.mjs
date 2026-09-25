@@ -36,6 +36,8 @@ const FLOW = arg('flow', '');
 const LANDING = arg('landing', '');
 const TIME = arg('time', '');
 const TOWN = arg('town', '');
+// Laya 托管：让本地决策模型来玩这一局（--laya 1）
+const LAYA = arg('laya', '');
 
 const GODOT = [
   join(ROOT, 'tools', 'godot-dl', 'exe', 'Godot_v4.4.1-stable_win64_console.exe'),
@@ -59,6 +61,7 @@ if (FLOW) args.push(`--flow=${FLOW}`);
 if (LANDING) args.push(`--landing=${LANDING}`);
 if (TIME) args.push(`--time=${TIME}`);
 if (TOWN) args.push(`--town=${TOWN}`);
+if (LAYA) args.push(`--laya=${LAYA}`);
 
 console.log('▶ 启动 Godot 截图…');
 // 注意：Godot 退出码非 0 时 execFileSync 会抛，但**截图可能已经成功**，
