@@ -206,7 +206,10 @@ var dead := false
 var respawn_timer := 0.0
 var invuln := 0.0
 var deaths := 0
-var dungeon_ref: DungeonFlow = null   # 副本里复活要回入口
+## ⚠️ **故意不加类型标注**：回归测试要注入一个假 flow，验证 `respawn()` 里
+## 「先在副本里 → 先撤出副本」这一步有没有被调到。标成 `DungeonFlow` 就没法 mock
+##（GDScript 不允许把别的对象赋给带类型的变量），那条 bug 也就守不住了。
+var dungeon_ref = null   # 副本里复活要回入口
 
 
 func die(source: String = "") -> void:

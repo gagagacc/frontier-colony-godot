@@ -1043,13 +1043,19 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
   }
 
   // 2) Boss 缩放（0.85 + (tier-1)*0.08 再乘层数补偿）
+  //
+  // ⚠️ 必须走 `enemyScaleFor`（JS 的缩放漏斗），**不要手抄公式** ——
+  //    星球难度分级是加在那个漏斗里的，手抄的公式会漏掉难度系数，
+  //    结果就是 Godot 侧算对了、金标准算错了（实测 bossScale 12 条 + matrix 24 条一起红）。
+  //    注意：`jsModule` 导入是**块级作用域**，这个块里得重新导一次。
+  const { enemyScaleFor } = await jsModule('systems/runState.js');
   const bossScaleCases = [];
   for (const P of [0, 2]) {
     for (const tier of [1, 5, 10]) {
-      const base = { hp: 1 + (tier - 1) * 0.42 + P * 0.38, dmg: 1 + (tier - 1) * 0.28 + P * 0.30 };
       const extra = 0.85 + (tier - 1) * 0.08;
-      const hp = base.hp * extra * (1 + (tier - 1) * 0.22);
-      const dmg = base.dmg * extra * (1 + (tier - 1) * 0.12);
+      const s = enemyScaleFor({ planetIndex: P }, tier, extra);
+      const hp = s.hp * (1 + (tier - 1) * 0.22);
+      const dmg = s.dmg * (1 + (tier - 1) * 0.12);
       bossScaleCases.push({ P, tier, hp: f(hp), dmg: f(dmg) });
     }
   }
@@ -1500,10 +1506,26 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
   ];
   golden.cases.modes = { modes, buildRadius, intervalCases, featureCases };
 }
+// ---- 星球难度分级（5 级）----
+//
+// 把「12 颗星球 → 等级」的映射与每级的乘数**都写进金标准**：
+// 玩家指定的数值（1 级 0.75 / 5 级 1.35 + 精英 1.25）不能被后续「平衡」悄悄改掉。
+{
+  const { PLANET_DIFF, PLANET_NAMES, planetDiffLevel, planetDiff } = await jsModule('data/planets.js');
+  const levels = [];
+  const tables = [];
+  for (let i = 0; i < PLANET_NAMES.length; i++) {
+    levels.push(planetDiffLevel(i));
+    const d = planetDiff(i);
+    tables.push({ level: d.level, name: d.name, count: d.count, hp: d.hp, dmg: d.dmg, elite: d.elite });
+  }
+  golden.cases.planetDiff = { levels, tables, table: PLANET_DIFF };
+}
 // ---- 四角色 × 三星球矩阵 ----
 {
   const { CHAR_DEF, CHAR_LIST } = await jsModule('data/characters.js');
   const { World } = await jsModule('world/world.js');
+  const { enemyScaleFor } = await jsModule('systems/runState.js');   // 块级作用域，这里要用就再导一次
   const cases = [];
   for (const cid of CHAR_LIST) {
     const def = CHAR_DEF[cid];
@@ -1522,9 +1544,9 @@ golden.cases.hashStr = ['frontier-abc', 'nest:3', '', 'a', '开拓者'].map(s =>
         pois: w.pois.length,
         // 世界哈希（同种子不同星球必须不同）
         tilesHash: (() => { let h = 2166136261 >>> 0; for (let i = 0; i < w.tiles.length; i += 7) h = Math.imul(h ^ w.tiles[i], 16777619) >>> 0; return h >>> 0; })(),
-        // 该星球第 3 层怪的缩放
-        scaleHp: f(1 + (3 - 1) * 0.42 + planet * 0.38),
-        scaleDmg: f(1 + (3 - 1) * 0.28 + planet * 0.30),
+        // 该星球第 3 层怪的缩放（同样走 JS 的缩放漏斗，别手抄公式）
+        scaleHp: f(enemyScaleFor({ planetIndex: planet }, 3, 1).hp),
+        scaleDmg: f(enemyScaleFor({ planetIndex: planet }, 3, 1).dmg),
       });
     }
   }

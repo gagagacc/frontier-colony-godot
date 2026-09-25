@@ -373,6 +373,13 @@ func _build_world_systems() -> void:
 	vehicle.x = bases_pos.x + 120.0
 	vehicle.y = bases_pos.y + 90.0
 	dungeon_flow = DungeonFlow.new()
+	# ⚠️ 必须在这里再赋一次：上面 `player.dungeon_ref = dungeon_flow` 那行跑的时候
+	# dungeon_flow **还是 null**（这里是 375 行才 new 的）—— 于是 respawn() 里
+	# 「副本内死亡就撤出副本」那段永远不执行，人被按**地表基地坐标**丢进副本世界，
+	# 表现就是玩家说的「在虫巢里死了，重生在虫巢那一层的基地位置」。
+	player.dungeon_ref = dungeon_flow
+	# 顺带让 DungeonFlow.enter() 自己再兜一次（见 dungeon_flow.gd），
+	# 免得以后又有人调整初始化顺序踩同一个坑。
 	director.beacon_fuel = 40.0
 	director.timer = lean_wave_seconds
 	enemies.spawn_around(8, 260.0, 520.0, 2)
@@ -591,6 +598,19 @@ func _debug_text() -> String:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# 前置流程（选星球屏）里的左右方向键 → 切换星球。
+	# 前端 FrontEnd 是 RefCounted（不是 Node），收不到输入事件，所以在这里转发。
+	if front_end != null and not playing and event is InputEventKey and event.pressed and not event.echo:
+		if front_end.screen == FrontEnd.Screen.PLANET:
+			var kc := (event as InputEventKey).physical_keycode
+			if kc == KEY_LEFT or kc == KEY_A:
+				front_end.planet_step(-1)
+				get_viewport().set_input_as_handled()
+				return
+			if kc == KEY_RIGHT or kc == KEY_D:
+				front_end.planet_step(1)
+				get_viewport().set_input_as_handled()
+				return
 	# 放置模式：左键落位、右键取消（与 JS 的 pendingPlacement 同流程）
 	if placing_tower and event is InputEventMouseButton and event.pressed:
 		var mb := event as InputEventMouseButton

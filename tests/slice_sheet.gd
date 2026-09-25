@@ -24,8 +24,10 @@ func _initialize() -> void:
 	var rows := int(args.get("rows", "0"))
 
 	var res: Dictionary
-	if cols > 1 and rows > 1:
-		res = SheetSlicer.slice_grid(sheet, out_dir, names, cols, rows, size)
+	# ⚠️ 条件是「任一 > 1」而不是「两者都 > 1」：5×1 的单行素材表也是合法网格。
+	# 第一版写成 and，结果 `--cols=5 --rows=1` 悄悄落回连通块模式，16 个图标只切出 1 张。
+	if cols > 1 or rows > 1:
+		res = SheetSlicer.slice_grid(sheet, out_dir, names, maxi(1, cols), maxi(1, rows), size)
 	elif grid > 1:
 		res = SheetSlicer.slice_grid(sheet, out_dir, names, grid, grid, size)
 	else:

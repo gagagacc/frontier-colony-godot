@@ -1,13 +1,13 @@
 {
-  "tower_cryo": 1.5809,
-  "tower_dronePlatform": 1.5815,
-  "tower_flameTower": 1.5715,
-  "tower_forceField": 1.5741,
-  "tower_gatling": 1.3203,
-  "tower_magneticRail": 1.2006,
-  "tower_mortar": 1.1226,
-  "tower_rail": 1.5977,
-  "tower_sentry": 1.5896,
-  "tower_sniper": 1.5798,
-  "tower_tesla": 1.5766
+  "tower_cryo": 1.5708,
+  "tower_dronePlatform": 1.5708,
+  "tower_flameTower": 1.5708,
+  "tower_forceField": 1.5708,
+  "tower_gatling": 1.5708,
+  "tower_magneticRail": 1.5707,
+  "tower_mortar": 1.5708,
+  "tower_rail": 1.5708,
+  "tower_sentry": 1.5708,
+  "tower_sniper": 1.5708,
+  "tower_tesla": 1.5708
 }

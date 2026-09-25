@@ -57,6 +57,11 @@ func enter(game, p_tier: int) -> bool:
 			String(boss["def"].get("name", "?")), int(boss["hp"]), ",".join(kinds)])
 	print("[godot] 副本守军 %d 只" % guard)
 	game_ref = game
+	# 兜底把引用挂到玩家身上：`PlayerSystem.respawn()` 靠它判断「人在副本里 → 先撤出副本」。
+	# 曾经因为 Game 里的赋值早于 `DungeonFlow.new()`，这个引用一直是 null，
+	# 于是虫巢内死亡后会重生在**副本层的基地坐标**（玩家报的 bug）。挂在 enter() 里就不会再错。
+	if game.player != null and "dungeon_ref" in game.player:
+		game.player.dungeon_ref = self
 	active = true
 	# 相机直接怼到新位置（不然会从地表「飞」过整张地图）
 	game.camera.position = game.player.position

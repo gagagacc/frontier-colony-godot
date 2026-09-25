@@ -212,26 +212,29 @@ func build_pool(contribs: Array) -> Array:
 	var max_tier := 1
 	for n in contribs:
 		max_tier = maxi(max_tier, int(n["tier"]))
-	for t in _roster("base"):
-		pool.append([t, 26])
+	# 星球难度里的「精英 ×1.25」作用在**精英怪种的权重**上（只有 5 级会动）
+	var elite_w := PlanetDiff.elite_mult(world.planet_index)
+	var defs := _monster_defs()
+	var push := func(list: Array, w: float) -> void:
+		for t in list:
+			var d: Dictionary = defs.get(String(t), {})
+			var wt := w
+			if elite_w != 1.0 and GdMath.truthy(d.get("elite", false)):
+				wt *= elite_w
+			pool.append([t, wt])
+	push.call(_roster("base"), 26.0)
 	if max_tier >= 2:
-		for t in _roster("mid"):
-			pool.append([t, 22])
+		push.call(_roster("mid"), 22.0)
 	if max_tier >= 3:
-		for t in _roster("high"):
-			pool.append([t, 20])
+		push.call(_roster("high"), 20.0)
 	if max_tier >= 4:
-		for t in _roster("special"):
-			pool.append([t, 8])
+		push.call(_roster("special"), 8.0)
 	for n in contribs:
 		var biome := int(n.get("biome", 0))
-		for t in _biome_monsters(biome):
-			pool.append([t, 7])
+		push.call(_biome_monsters(biome), 7.0)
 	if beacon_intensity > 0.6:
-		for t in _roster("special"):
-			pool.append([t, 14])
-		for t in _roster("high"):
-			pool.append([t, 10])
+		push.call(_roster("special"), 14.0)
+		push.call(_roster("high"), 10.0)
 	return pool
 
 
@@ -285,7 +288,8 @@ func start_wave() -> Dictionary:
 	for n in contribs:
 		threat += float(n["threat"])
 	var budget := int(round((10.0 + threat * 7.5) * (0.45 + beacon_intensity)
-		* (1.0 + float(world.planet_index) * 0.16)))
+		* (1.0 + float(world.planet_index) * 0.16)
+		* PlanetDiff.count_mult(world.planet_index)))
 
 	composition = []
 	var spent := 0

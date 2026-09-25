@@ -19,12 +19,17 @@ static func next_id() -> int:
 
 
 ## 与 JS `enemyScaleFor` 同式
+##
+## 星球难度分级（1~5 级）在这里统一乘血量/伤害 —— 所以怪潮、副本守军、召唤物、Boss
+## 全部一致；`xp` / `gold` 不动（玩家只要求改血量与伤害）。
 static func scale_for(planet_index: int, tier: int, extra: float = 1.0) -> Dictionary:
 	var p := float(planet_index)
 	var t := 1.0 + (float(tier) - 1.0) * 0.42 + p * 0.38
+	var dh := PlanetDiff.hp_mult(planet_index)
+	var dd := PlanetDiff.dmg_mult(planet_index)
 	return {
-		"hp": t * extra,
-		"dmg": (1.0 + (float(tier) - 1.0) * 0.28 + p * 0.30) * extra,
+		"hp": t * extra * dh,
+		"dmg": (1.0 + (float(tier) - 1.0) * 0.28 + p * 0.30) * extra * dd,
 		"xp": 1.0 + (float(tier) - 1.0) * 0.5 + p * 0.45,
 		"gold": 1.0 + (float(tier) - 1.0) * 0.55 + p * 0.5,
 	}

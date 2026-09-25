@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T05:25:29.218Z",
+  "generatedAt": "2026-09-25T00:48:37.594Z",
   "source": "src/data/*.js",
   "modules": [
     {
@@ -198,6 +198,7 @@
       "module": "planets",
       "file": "planets.json",
       "tables": [
+        "PLANET_DIFF",
         "PLANET_NAMES",
         "PLANET_SUFFIX",
         "POP_TIERS",
@@ -205,6 +206,7 @@
         "TOWN_BUILDING_DEF"
       ],
       "counts": {
+        "PLANET_DIFF": 5,
         "PLANET_NAMES": 12,
         "PLANET_SUFFIX": 8,
         "POP_TIERS": 6,

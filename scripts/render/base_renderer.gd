@@ -57,9 +57,17 @@ static func draw_base(c: CanvasItem, b: Dictionary, time: float,
 		c.draw_arc(pos, r * 0.85 * pulse, 0, TAU, 48, PLATFORM_EDGE, 3.0)
 
 	# ④ 核心舱本体：有贴图用贴图（俯视核心舱），否则圆角方块 + 天线 + 闪灯
+	#
+	# 血量掉到一半以下时换成**「受损但仍在运作」**那张贴图 —— 玩家一眼能看出基地快撑不住了；
+	# 那张图缺失就继续用完好版（不会因为少一张素材就出错）。
+	var hp_frac := GdMath.clampf01(float(b.get("hp", 1.0)) / maxf(1.0, float(b.get("maxHp", 1.0))))
 	var core_tex := Sprites.get_tex("base_core")
+	if hp_frac < 0.5:
+		var hurt := Sprites.get_tex("base_core_damaged")
+		if hurt != null:
+			core_tex = hurt
 	if core_tex != null:
-		Sprites.draw_centered(c, core_tex, pos, r * 0.95)
+		Sprites.draw_centered(c, core_tex, pos, r * 1.15)
 		# 贴图上没有"挨打"提示，保底加一圈红描边
 		if under_attack:
 			c.draw_arc(pos, r * 0.5, 0, TAU, 40, Color(1.0, 0.37, 0.43, 0.75), 3.0)

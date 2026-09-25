@@ -74,6 +74,8 @@ func _initialize() -> void:
 	_test_steam()
 	_test_assets()
 	_test_world_switch()
+	_test_planet_diff(cases.get("planetDiff", {}))
+	_test_respawn_in_dungeon()
 	_test_feel(cases.get("feel", {}))
 	_test_gunplay(cases.get("gunplay", {}))
 	_test_camera(cases.get("camera", {}))
@@ -2150,6 +2152,15 @@ func _test_assets() -> void:
 		_check(Sprites.get_tex("nest_%d" % i) != null, "素材.巢穴贴图存在：nest_%d" % i)
 	for nm in ["base_core", "base_platform", "base_rubble"]:
 		_check(Sprites.get_tex(nm) != null, "素材.基地贴图存在：" + nm)
+	# 星球贴图按难度档位 1..5（选星球界面居中展示的就是它们）
+	for i in range(1, 6):
+		_check(Sprites.get_tex("planet_%d" % i) != null, "素材.星球贴图存在：planet_%d" % i)
+	# 四个角色的立绘（选人界面）。⚠️ 这条曾经抓到过真问题：PNG 拷进来了但
+	# `.import` 元数据没生成，`ResourceLoader.exists` 返回 false → 立绘整块不显示。
+	var cdefs: Dictionary = DataLoader.new().module("characters")
+	for cid in cdefs.get("CHAR_LIST", []):
+		_check(Sprites.get_tex("char_" + String(cid)) != null,
+			"素材.角色立绘存在：char_" + String(cid), "PNG 在但 .import 缺失也会读不到")
 
 
 ## 进出副本时**道具系统必须跟着换世界** —— 玩家报的「虫巢里矿生成位置不对」就出在这儿。
@@ -2181,7 +2192,88 @@ func _test_world_switch() -> void:
 	_check(not pr.chunks.is_empty(), "切世界.地表区块缓存也装回来了")
 
 
-## 量一张贴图里炮管的仰角（正数，弧度）与左右镜像 IoU。算法与 tests/probe_barrel.gd 一致。
+## 星球难度分级（5 级）—— 映射与乘数逐条对金标准（数值是玩家指定的，不许被"平衡"改掉）；
+## 另外把三处注入点也测一遍：刷怪预算 / 敌人缩放 / 精英权重。
+func _test_planet_diff(c: Dictionary) -> void:
+	if c.is_empty():
+		_fail("星球难度.金标准缺失", "planetDiff")
+		return
+	var levels: Array = c.get("levels", [])
+	var tables: Array = c.get("tables", [])
+	_check(levels.size() >= 12, "星球难度.等级条数", str(levels.size()))
+	for i in mini(levels.size(), tables.size()):
+		_eq("星球难度(%d).level" % i, PlanetDiff.level_for(i), int(levels[i]))
+		var t: Dictionary = tables[i]
+		_approx("星球难度(%d).count" % i, PlanetDiff.count_mult(i), float(t["count"]))
+		_approx("星球难度(%d).hp" % i, PlanetDiff.hp_mult(i), float(t["hp"]))
+		_approx("星球难度(%d).dmg" % i, PlanetDiff.dmg_mult(i), float(t["dmg"]))
+		_approx("星球难度(%d).elite" % i, PlanetDiff.elite_mult(i), float(t["elite"]))
+		_eq("星球难度(%d).name" % i, PlanetDiff.name_of(i), String(t["name"]))
+	# 玩家指定的数值原样落地
+	var l1 := PlanetDiff.entry(0)
+	_approx("星球难度.1级怪量-25%", float(l1.get("count", 0.0)), 0.75)
+	_approx("星球难度.1级血伤75%", float(l1.get("hp", 0.0)), 0.75)
+	_approx("星球难度.1级伤害75%", float(l1.get("dmg", 0.0)), 0.75)
+	var l2 := PlanetDiff.entry(3)
+	_approx("星球难度.2级怪量-10%", float(l2.get("count", 0.0)), 0.90)
+	var l3 := PlanetDiff.entry(5)
+	_approx("星球难度.3级标准", float(l3.get("count", 0.0)), 1.00)
+	_approx("星球难度.3级血伤", float(l3.get("hp", 0.0)), 1.00)
+	var l4 := PlanetDiff.entry(8)
+	_approx("星球难度.4级怪量+25%", float(l4.get("count", 0.0)), 1.25)
+	_approx("星球难度.4级血伤+15%", float(l4.get("hp", 0.0)), 1.15)
+	var l5 := PlanetDiff.entry(11)
+	_approx("星球难度.5级怪量+35%", float(l5.get("count", 0.0)), 1.35)
+	_approx("星球难度.5级血伤+20%", float(l5.get("hp", 0.0)), 1.20)
+	_approx("星球难度.5级精英+25%", float(l5.get("elite", 0.0)), 1.25)
+	# 注入点①：敌人缩放 —— 直接把公式算出来对比，确认难度系数真的乘进去了
+	# （scale_for: hp = (1 + (tier-1)*0.42 + P*0.38) * extra * diff.hp）
+	var s5 := EnemyFactory.scale_for(11, 1, 1.0)
+	var s3 := EnemyFactory.scale_for(5, 1, 1.0)
+	var s1 := EnemyFactory.scale_for(0, 1, 1.0)
+	_approx("星球难度.注入.5级血量=基础×1.20", float(s5["hp"]), (1.0 + 11.0 * 0.38) * 1.20)
+	_approx("星球难度.注入.1级血量=基础×0.75", float(s1["hp"]), 1.0 * 0.75)
+	_approx("星球难度.注入.3级血量=基础×1.00", float(s3["hp"]), (1.0 + 5.0 * 0.38) * 1.00)
+	_approx("星球难度.注入.5级伤害=基础×1.20", float(s5["dmg"]), (1.0 + 0.0 * 0.28 + 11.0 * 0.30) * 1.20)
+	_check(float(s5["hp"]) > float(s3["hp"]), "星球难度.注入.5级怪更硬")
+	_check(float(s1["hp"]) < float(s3["hp"]), "星球难度.注入.1级怪更脆")
+	# xp / gold 不受难度影响（玩家只要求改血量与伤害）
+	_approx("星球难度.注入.金币不受难度影响", float(s5["gold"]), 1.0 + 0.0 * 0.55 + 11.0 * 0.5)
+
+
+## 出副本死亡的回归：`respawn()` 必须**先撤出副本**再落到地表基地。
+##
+## 由来：Game 里 `player.dungeon_ref = dungeon_flow` 写在了 `DungeonFlow.new()` **之前**，
+## 于是这个引用一直是 null，`respawn()` 里"先撤出"那段永远不执行 ——
+## 玩家在虫巢里死了会被按**地表基地坐标**丢在副本世界里（他报的"重生在虫巢那一层的基地位置"）。
+class _FakeFlow extends RefCounted:
+	var active := true
+	var exit_called := false
+	func exit(_g = null) -> bool:
+		exit_called = true
+		active = false
+		return true
+
+
+func _test_respawn_in_dungeon() -> void:
+	var p = load("res://scripts/entities/player.gd").new()
+	p.bases_pos = Vector2(1000.0, 2000.0)
+	var fake := _FakeFlow.new()
+	p.dungeon_ref = fake
+	p.call("respawn")
+	_check(fake.exit_called, "副本死亡.先撤出副本", "dungeon_ref 没接上就会漏掉这一步")
+	_eq("副本死亡.落在地表基地旁", p.position, Vector2(1070.0, 2040.0))
+	# 不在副本里时不该去调 exit
+	var fake2 := _FakeFlow.new()
+	fake2.active = false
+	var p2 = load("res://scripts/entities/player.gd").new()
+	p2.bases_pos = Vector2(10.0, 20.0)
+	p2.dungeon_ref = fake2
+	p2.call("respawn")
+	_check(not fake2.exit_called, "副本死亡.地表死亡不撤副本")
+	_eq("副本死亡.地表死亡落在基地旁", p2.position, Vector2(80.0, 60.0))
+	p.free()
+	p2.free()
 func _measure_barrel(path: String) -> Dictionary:
 	var img := Image.load_from_file(ProjectSettings.globalize_path(path))
 	if img == null:
@@ -2704,12 +2796,24 @@ func _test_front_flow() -> void:
 	if next2 != null:
 		next2.emit_signal("pressed")
 		_eq("flow.下一步 → 星球屏", fe.screen, FrontEnd.Screen.PLANET)
-	# ④ 星球屏：选星球 + 开始游戏
-	var planet_btn: Button = find_btn.call("比邻星")
-	if planet_btn != null:
-		planet_btn.emit_signal("pressed")
-		_eq("flow.点星球后仍在星球屏", fe.screen, FrontEnd.Screen.PLANET)
-		_eq("flow.星球已切换", fe.planet_index, 2)
+	# ④ 星球屏：用 ◀ ▶ 选星球（界面改成「星球居中 + 左右切换」，不再是一格格按钮）
+	var step_btn: Button = find_btn.call("▶")
+	if step_btn != null:
+		step_btn.emit_signal("pressed")
+		_eq("flow.点▶后仍在星球屏", fe.screen, FrontEnd.Screen.PLANET)
+		_eq("flow.星球 +1", fe.planet_index, 1)
+		# 界面重建过，按钮是新对象，得重新找
+		var step2: Button = find_btn.call("▶")
+		if step2 != null:
+			step2.emit_signal("pressed")
+		_eq("flow.星球再 +1", fe.planet_index, 2)
+	var back_btn: Button = find_btn.call("◀")
+	if back_btn != null:
+		back_btn.emit_signal("pressed")
+		_eq("flow.◀ 回退一颗", fe.planet_index, 1)
+	var again: Button = find_btn.call("▶")
+	if again != null:
+		again.emit_signal("pressed")
 	var start_btn: Button = find_btn.call("开始游戏")
 	_check(start_btn != null, "flow.星球屏有「开始游戏」", "找不到")
 	if start_btn != null:

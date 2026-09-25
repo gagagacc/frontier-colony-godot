@@ -64,6 +64,23 @@ func goto(s: int) -> void:
 	rebuild()
 
 
+## 每一屏的专属背景贴图（`assets/sprites/ui_bg_<name>.png`）；没有就返回 null（退回纯色）
+func _screen_bg_texture(s: int) -> Texture2D:
+	var name := ""
+	match s:
+		Screen.TITLE:
+			name = "title"
+		Screen.PLANET:
+			name = "planet"
+		Screen.CHARACTER:
+			name = "character"
+		Screen.SETTINGS:
+			name = "settings"
+		_:
+			return null
+	return Sprites.get_tex("ui_bg_" + name)
+
+
 func rebuild() -> void:
 	if root == null:
 		return
@@ -73,11 +90,25 @@ func rebuild() -> void:
 	for c in root.get_children():
 		root.remove_child(c)
 		c.queue_free()
-	# 全屏不透明底：背后绝不能漏出战场（这正是原来那个 bug 的观感来源）
-	var bg := ColorRect.new()
-	bg.color = Color("#0b0f16")
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(bg)
+	# 全屏底：优先用**这一屏专属的生图背景**（ui_bg_<screen>.png），
+	# 没有就退回纯色。背景之上再压一层半透明暗色，保证文字始终读得清。
+	var bg_tex := _screen_bg_texture(screen)
+	if bg_tex != null:
+		var tr := TextureRect.new()
+		tr.texture = bg_tex
+		tr.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		root.add_child(tr)
+		var veil := ColorRect.new()
+		veil.color = Color(0.03, 0.05, 0.09, 0.55)
+		veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+		root.add_child(veil)
+	else:
+		var bg := ColorRect.new()
+		bg.color = Color("#0b0f16")
+		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+		root.add_child(bg)
 	var box := VBoxContainer.new()
 	box.position = Vector2(120, 70)
 	box.custom_minimum_size = Vector2(1040, 0)
@@ -288,6 +319,20 @@ func _build_character(box: Node) -> void:
 		var id_c := String(id)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 16)
+		# 角色立绘（`char_<id>.png`）——缺失时整块跳过，不影响选人
+		var portrait := Sprites.get_tex("char_" + String(id))
+		if portrait != null:
+			var holder := CenterContainer.new()
+			holder.custom_minimum_size = Vector2(96, 96)
+			var tr := TextureRect.new()
+			tr.texture = portrait
+			tr.custom_minimum_size = Vector2(88, 88)
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			if not sel:
+				tr.modulate = Color(0.62, 0.66, 0.72)      # 未选中的压暗，选中的高亮
+			holder.add_child(tr)
+			row.add_child(holder)
 		var pick := _option_button(String(d.get("name", id)), sel, Color("#8fe0ff"),
 			func() -> void:
 				character = id_c
@@ -327,44 +372,118 @@ func _build_character(box: Node) -> void:
 
 
 # ---------- 星球与种子 ----------
-func _build_planet(box: Node) -> void:
-	box.add_child(_title("星球与种子", 32))
+#
+# 玩家要的样子：**星球贴图居中展示，名字标在星球下方，左右滑选**，
+# 并且把难度分级直接写在星球下面。
+# 星球贴图按**难度档位**取（5 张，`planet_1..5`）—— 一眼就能看出这颗星球有多凶。
+func _planet_name(i: int) -> String:
 	var mod: Dictionary = DataLoader.new().module("planets")
 	var names: Array = mod.get("PLANET_NAMES", [])
 	var suffix: Array = mod.get("PLANET_SUFFIX", [])
-	box.add_child(_sub("点星球选中（打勾），种子可以手填或随机；下面点「开始游戏」就落地。"))
-	box.add_child(_spacer(12))
-	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 6)
-	for i in mini(names.size(), 12):
-		var label := "%s·%s" % [String(names[i]), String(suffix[i % maxi(1, suffix.size())])]
-		var b := _option_button(label, i == planet_index, Color("#ffba4c"),
-			func() -> void:
-				planet_index = i
-				rebuild(), Vector2(230, 34))
-		grid.add_child(b)
-	box.add_child(grid)
-	box.add_child(_spacer(14))
+	if names.is_empty():
+		return "未知星球"
+	return "%s·%s" % [String(names[i % names.size()]), String(suffix[i % maxi(1, suffix.size())])]
+
+
+func planet_step(dir: int) -> void:
+	var mod: Dictionary = DataLoader.new().module("planets")
+	var n: int = maxi(1, (mod.get("PLANET_NAMES", []) as Array).size())
+	planet_index = int(fposmod(float(planet_index + dir), float(n)))
+	rebuild()
+
+
+func _build_planet(box: Node) -> void:
+	box.add_child(_title("选择星球", 30))
+	box.add_child(_sub("点 ◀ ▶ 或按键盘左右方向键切换星球；星球下方标着这一局的难度与倍率。"))
+
+	var stage := HBoxContainer.new()
+	stage.alignment = BoxContainer.ALIGNMENT_CENTER
+	stage.add_theme_constant_override("separation", 20)
+	stage.add_child(_btn("◀", func() -> void: planet_step(-1), Vector2(52, 150)))
+
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.custom_minimum_size = Vector2(340, 0)
+	col.add_theme_constant_override("separation", 2)
+	var holder := CenterContainer.new()
+	# 星球 170px：720p 屏幕要塞得下「星球 + 名字 + 难度 + 说明 + 种子行 + 按钮」，
+	# 300px 那版直接把底部整行挤出画面（截图实测）
+	holder.custom_minimum_size = Vector2(175, 175)
+	var lv := PlanetDiff.level_for(planet_index)
+	var tex := Sprites.get_tex("planet_%d" % lv)
+	if tex != null:
+		var tr := TextureRect.new()
+		tr.texture = tex
+		tr.custom_minimum_size = Vector2(170, 170)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		holder.add_child(tr)
+	else:
+		# 贴图缺失：画一个带星球名的占位圆（仍然能玩、能选）
+		var ph := Label.new()
+		ph.text = "（星球贴图 planet_%d 缺失）" % lv
+		ph.add_theme_color_override("font_color", Color("#6b7684"))
+		holder.add_child(ph)
+	col.add_child(holder)
+	# 名字标在**星球正下方**
+	var name_l := Label.new()
+	name_l.text = _planet_name(planet_index)
+	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_l.add_theme_font_size_override("font_size", 22)
+	name_l.add_theme_color_override("font_color", Color("#e8eef7"))
+	col.add_child(name_l)
+	# 难度分级
+	var diff_l := Label.new()
+	diff_l.text = "难度 %d 级 · %s" % [lv, PlanetDiff.name_of(planet_index)]
+	diff_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	diff_l.add_theme_font_size_override("font_size", 17)
+	diff_l.add_theme_color_override("font_color", Color("#ffba4c"))
+	col.add_child(diff_l)
+	var mod_l := Label.new()
+	mod_l.text = PlanetDiff.summary(planet_index)
+	mod_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mod_l.add_theme_font_size_override("font_size", 14)
+	mod_l.add_theme_color_override("font_color", Color("#8fe0ff"))
+	col.add_child(mod_l)
+	var desc_l := Label.new()
+	desc_l.text = PlanetDiff.desc_of(planet_index)
+	desc_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_l.custom_minimum_size = Vector2(340, 0)
+	desc_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc_l.add_theme_font_size_override("font_size", 13)
+	desc_l.add_theme_color_override("font_color", Color("#8ba0bb"))
+	col.add_child(desc_l)
+	stage.add_child(col)
+	stage.add_child(_btn("▶", func() -> void: planet_step(1), Vector2(52, 150)))
+	box.add_child(stage)
+
+	# 底部：星球序号 + 种子（一行塞下，省高度）
 	var srow := HBoxContainer.new()
+	srow.alignment = BoxContainer.ALIGNMENT_CENTER
 	srow.add_theme_constant_override("separation", 10)
+	# ⚠️ 这里不能用 `_sub()`：它带自动换行，在 HBox 里会被压成「一列一个字」，
+	# 整行被撑得很高、把下面的按钮顶出屏幕（截图实测）。行内标签一律不换行。
+	var idx_l := Label.new()
+	idx_l.text = "第 %d / 12 号星球" % (planet_index + 1)
+	idx_l.add_theme_font_size_override("font_size", 15)
+	idx_l.add_theme_color_override("font_color", Color("#8ba0bb"))
+	srow.add_child(idx_l)
 	var seed_edit := LineEdit.new()
 	seed_edit.text = seed_text
-	seed_edit.custom_minimum_size = Vector2(420, 36)
+	seed_edit.custom_minimum_size = Vector2(300, 32)
 	seed_edit.text_changed.connect(func(t: String) -> void: seed_text = t)
 	srow.add_child(seed_edit)
 	srow.add_child(_btn("随机种子", func() -> void:
 		seed_text = random_seed_text()
-		rebuild(), Vector2(140, 36)))
+		rebuild(), Vector2(110, 32)))
 	box.add_child(srow)
-	# 落点摘要：确认一下「我要用哪套配置开局」
 	var summary := Label.new()
-	summary.text = "即将开始：%s · %s · 第 %d 号星球 · 种子 %s" % [
+	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	summary.add_theme_font_size_override("font_size", 13)
+	summary.text = "即将开始：%s · %s · %s · 难度 %d 级 · 种子 %s" % [
 		String(_mode_def().get("name", mode)), String(_char_def().get("name", character)),
-		planet_index + 1, seed_text]
+		_planet_name(planet_index), lv, seed_text]
 	summary.add_theme_color_override("font_color", Color("#6ee7a8"))
-	box.add_child(_spacer(6))
 	box.add_child(summary)
 	_footer(box, Screen.CHARACTER, "开始游戏 →",
 		func() -> void: start_requested.emit(start_params()))
