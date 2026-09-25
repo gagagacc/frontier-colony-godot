@@ -334,14 +334,17 @@ static func _split_on_gaps(solid: PackedByteArray, dw: int, b: Rect2i) -> Array:
 				ink += 1
 		if ink <= row_tol:
 			row_breaks.append(y)
+	# ⚠️ 列也要带容差（2026-09-25 补）：一行 5 颗星球那种素材表，球体之间的**辉光**会把
+	#    相邻两颗连成一个连通块 —— 严格"全空列"判据切不开（实测 5 颗只切出 3 块 + 1 大块）。
+	#    容差取高度的 6%：辉光只有薄薄一层，而炮管那种实心竖条远超这个量，不会被腰斩。
+	var col_tol := maxi(1, int(float(y1 - y0 + 1) * 0.06))
 	var col_breaks: Array = []
 	for x in range(x0, x1 + 1):
-		var any := false
+		var ink := 0
 		for y in range(y0, y1 + 1):
 			if solid[y * dw + x] == 1:
-				any = true
-				break
-		if not any:
+				ink += 1
+		if ink <= col_tol:
 			col_breaks.append(x)
 	if row_breaks.is_empty() and col_breaks.is_empty():
 		return [b]      # 本来就是完整一块

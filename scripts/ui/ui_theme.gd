@@ -42,6 +42,41 @@ static func panel_stylebox() -> StyleBoxTexture:
 	return sb
 
 
+## 按钮 9-slice 皮（快捷栏格子之类也复用同一张）
+static func button_stylebox() -> StyleBoxTexture:
+	var tex := _tex("res://assets/ui/button_bg.png")
+	if tex == null:
+		return null
+	var sb := StyleBoxTexture.new()
+	sb.texture = tex
+	sb.set_texture_margin_all(maxf(4.0, roundf(tex.get_size().y / 8.0)))
+	sb.content_margin_left = 10.0
+	sb.content_margin_right = 10.0
+	sb.content_margin_top = 6.0
+	sb.content_margin_bottom = 6.0
+	return sb
+
+
+## HUD 小卡片皮：跟面板用**同一张生图**，但边距小得多。
+##
+## HUD 元素只有几十像素高，面板那套 43px 边距的 9-slice 角块会直接重叠（画不出来）；
+## 这里把纹理边距压到 1/16、内容边距压到 10/4，才像样。
+## 玩家要求：「物品栏还有地图和血量倒计时什么的 hud，不要只是文字悬浮在那」。
+static func hud_card_stylebox() -> StyleBoxTexture:
+	var tex := _tex("res://assets/ui/panel_bg.png")
+	if tex == null:
+		return null
+	var sb := StyleBoxTexture.new()
+	sb.texture = tex
+	sb.set_texture_margin_all(maxf(4.0, roundf(tex.get_size().x / 16.0)))
+	sb.content_margin_left = 10.0
+	sb.content_margin_right = 10.0
+	sb.content_margin_top = 4.0
+	sb.content_margin_bottom = 4.0
+	sb.modulate_color = Color(0.88, 0.94, 1.0, 0.94)
+	return sb
+
+
 static func build() -> Theme:
 	var th := Theme.new()
 	# ① 中文像素字体（找不到就保持引擎默认）

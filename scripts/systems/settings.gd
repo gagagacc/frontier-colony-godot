@@ -11,7 +11,9 @@ const PATH := "user://settings.json"
 
 const DEFAULTS := {
 	"masterVolume": 0.8, "musicVolume": 0.6, "sfxVolume": 0.9, "showGamepadHint": true,
-	"quality": 2, "uiScale": 1.0, "language": "zh",
+	# uiScale 默认 0.95：玩家实测「缩到 0.95 时 UI 外框大小很合适」——
+	# 1.0 时面板边框会贴着 720p 屏幕边缘、底边被切掉。
+	"quality": 2, "uiScale": 0.95, "language": "zh",
 	"showFps": true, "showMinimap": true, "screenShake": 1.0,
 	"fullscreen": false, "autoSaveMinutes": 5,
 }

@@ -6,6 +6,32 @@ class_name DataLoader
 
 const DATA_DIR := "res://data/"
 
+## 怪物表缓存（补过 id 的那份）
+static var _monster_cache: Dictionary = {}
+
+
+## 怪物定义表，**每条都补上了 `id`**（= 表里的键）。
+##
+## ## 为什么必须补
+##
+## `MONSTER_DEF` 里的条目**本身没有 `id` 字段**（键才是 id）。而实体创建时写的是
+## `monster_def.get("id", "")` —— 拿到空串，于是怪物贴图查找走的是
+## `def.get("id", e.get("kind"))` = 实体类型 `"enemy"`，
+## 去找 `enemy_enemy_s.png`（当然没有）→ **每次都退回单图旋转**。
+## 玩家看到的「怪根本没切换贴图、只是在转」就是这个：三视图做了、也装了，但**取不到**。
+##
+## 所以统一在这里把键写回条目里，调用方（导演/敌人工厂/名字表）拿到的都是带 id 的定义。
+static func monster_defs() -> Dictionary:
+	if not _monster_cache.is_empty():
+		return _monster_cache
+	var table: Dictionary = DataLoader.new().table("monsters", "MONSTER_DEF", {})
+	for k in table.keys():
+		var d = table[k]
+		if d is Dictionary and String((d as Dictionary).get("id", "")) == "":
+			(d as Dictionary)["id"] = String(k)
+	_monster_cache = table
+	return _monster_cache
+
 var _cache: Dictionary = {}
 var index: Dictionary = {}
 

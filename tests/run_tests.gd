@@ -2124,6 +2124,24 @@ func _test_assets() -> void:
 			_check(Sprites.enemy_view_tex(kind0, vi) != null,
 				"素材.怪物三视图存在：%s_%s" % [kind0, String(Sprites.ENEMY_VIEWS[vi])],
 				"缺失会退回单图旋转")
+	# ⚠️⚠️ 下面这段是**血的教训**：上面那些断言全绿、文件也都在，但游戏里怪物**仍然只是旋转**。
+	#    原因：`MONSTER_DEF` 条目本身没有 `id` 字段（键才是 id），实体创建时拿到的是空串，
+	#    贴图查找退化成 `def.get("id", e.get("kind"))` = 实体类型 `"enemy"`
+	#    → 去找 `enemy_enemy_s.png`（不存在）→ 永远走单图旋转兜底。
+	#    **所以必须走"创建一只怪 → 用它的 type 去查贴图"这条真实路径。**
+	var mdefs2: Dictionary = DataLoader.monster_defs()
+	for k in mdefs2.keys():
+		var kk := String(k)
+		_eq("素材.怪种定义带 id：" + kk, String((mdefs2[kk] as Dictionary).get("id", "")), kk)
+	var probe_def: Dictionary = mdefs2.get("grub", {})
+	if not probe_def.is_empty():
+		var probe_e: Dictionary = EnemyFactory.create(Rng.new("view-probe"), probe_def, 0.0, 0.0, {})
+		var etype := String(probe_e.get("type", ""))
+		_check(etype != "" and etype != "enemy", "素材.怪物实体带正确 type", "拿到的是 '" + etype + "'")
+		for vi2 in 3:
+			_check(Sprites.enemy_view_tex(etype, vi2) != null,
+				"素材.实体 type 能查到三视图：" + String(Sprites.ENEMY_VIEWS[vi2]),
+				"查不到就会退回单图旋转（玩家看到的「没切换、只是在转」）")
 	# 朝向 → 视图/镜像 的映射（八向：朝下=正俯视、朝上=背面、朝左右=侧视+镜像）
 	_eq("朝向.朝下=正俯视", Sprites.enemy_facing_view(PI / 2.0), [0, false])
 	_eq("朝向.朝上=背面", Sprites.enemy_facing_view(-PI / 2.0), [1, false])

@@ -40,6 +40,8 @@ class DefaultStart:
 var hitstop := 0.0
 var hitstop_scale := 1.0
 var base_destroyed_shown := false
+## 结算界面只弹一次
+var game_over_shown := false
 var run_mode: RunMode
 var _ach_timer := 2.0
 var props_layer: Node2D
@@ -296,6 +298,8 @@ func _build_world_systems() -> void:
 	enemies.town_ref = town
 	enemies.towers_ref2 = towers
 	player.hurt.connect(func(mag: float) -> void: cam_rig.shake(mag))
+	# 死亡 → 如果核心舱已经没了，这就是终局（弹结算，不再复活）
+	player.final_death.connect(func() -> void: _show_game_over())
 	# 开火：枪口光 + 音效（重武器用另一套音色）
 	player.fired.connect(func(pos: Vector2, heavy: bool) -> void:
 		if lighting != null:
@@ -443,6 +447,10 @@ func _process(delta: float) -> void:
 	# 暂停时**只停世界推进**，不能整个 return ——
 	# 早先写成 `if paused: return`，结果连自动截图的帧计数也一起停了，
 	# 带 --panel 跑截图时游戏直接挂住不退出（截图工具超时）。
+	# 放置预览**不受暂停影响**：放置模式本身就是暂停状态，预览必须跟着鼠标动
+	# （原先预览更新在 `not paused` 里面，一进暂停就冻住）
+	if placing_tower:
+		towers.update_preview(get_global_mouse_position())
 	if not paused:
 		# 顿帧：命中瞬间把世界推进压慢一点，打击感靠它
 		var world_delta := delta
@@ -818,19 +826,33 @@ func _loot_ruin(poi: Dictionary) -> void:
 var placing_tower := false
 
 
+## 进入放置模式 —— 玩家要求：**放置模式要暂停游戏**。
+##
+## 之前这里反而会 `toggle_pause()` 把游戏**恢复**运行（"进建造模式顺便取消暂停"），
+## 于是玩家一边摆塔、倒计时一边在走、怪照常打过来（他报的原话）。
+## 现在保持暂停：世界冻住，只更新放置预览；Esc/右键/B 退出放置模式。
 func _begin_placement(tower_id: String) -> void:
 	towers.selected = tower_id
 	placing_tower = true
-	if paused:
-		toggle_pause()
+	if not paused:
+		toggle_pause()          # 确保处于暂停（而不是取消暂停）
+	_hide_pause_panel()          # 但把面板收起来，好看清场地
+	print("[godot] 进入放置模式：%s（世界已暂停 · 鼠标左键落位 · Esc/B/右键取消）" % tower_id)
+
+
+## 收起暂停面板但**保持暂停**（放置模式用）
+func _hide_pause_panel() -> void:
 	if panel_root != null:
-		panel_root.visible = false
-	print("[godot] 进入放置模式：%s（鼠标左键落位 · B 或 Esc 取消）" % tower_id)
+		panel_root.queue_free()
+		panel_root = null
 
 
 func _cancel_placement() -> void:
 	placing_tower = false
-	print("[godot] 已取消放置")
+	# 退出放置模式后回到暂停面板（仍然暂停），玩家想继续跑就再按一次 Esc
+	if paused:
+		_refresh_panel()
+	print("[godot] 已取消放置（世界仍然暂停，Esc 继续）")
 
 
 func _muzzle_flash_at(pos: Vector2) -> void:
@@ -848,6 +870,9 @@ func _confirm_placement() -> void:
 		audio.play("build")
 		print("[godot] 空投 %s → (%.0f, %.0f)" % [towers.selected, mouse.x, mouse.y])
 		placing_tower = false
+		# 落位后回到暂停面板（世界仍然暂停）：玩家要接着摆下一座就再点一次「建造」
+		if paused:
+			_refresh_panel()
 
 
 
@@ -1047,8 +1072,10 @@ func _refresh_panel() -> void:
 	panel_root.name = "PanelRoot"
 	panel_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	$UI.add_child(panel_root)
-	var win := UiPanels.make_window("暂停 —— %s（Tab 切换 · Esc 关闭）" % TAB_NAMES[panel_tab], Vector2(880, 640))
-	win.position = Vector2(200, 70)
+	var win := UiPanels.make_window("暂停 —— %s（Tab 切换 · Esc 关闭）" % TAB_NAMES[panel_tab], Vector2(880, 610))
+	# 上移一点：原来 (200,70) + 640 高，底边正好压在 720p 屏幕边缘上，
+	# 9-slice 的外框下半截被切掉（玩家报的「下面的 ui 边界都看不见」）
+	win.position = Vector2(200, 36)
 	panel_root.add_child(win)
 	var box: Node = win.get_node_or_null("Body")
 	if box == null:
@@ -1153,8 +1180,9 @@ func _fill_tech(body: Node) -> void:
 		tabs.add_child(btn)
 	body.add_child(tabs)
 	# 图区（可滚动：有些分支六列放不下）
+	# 高度从 380 提到 470：玩家要求「去掉下面那行字、把中间科技树的面积让出来」
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(820, 380)
+	scroll.custom_minimum_size = Vector2(820, 470)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	var canvas := Control.new()
 	# ⚠️ 必须 PASS：默认的 STOP 会把滚轮事件吃掉，ScrollContainer 收不到 ——
@@ -1172,20 +1200,18 @@ func _fill_tech(body: Node) -> void:
 		String(start_params_static.get("character", "engineer")))
 	tech_view.queue_redraw()
 	body.add_child(scroll)
-	# 选中节点的详情
+	# 选中节点的详情（保留：点节点看说明是有用的）
 	if tech_view.focused != "":
 		var def := tech.tech_def(tech_view.focused)
 		var d1 := Label.new()
 		d1.text = "%s —— %s" % [String(def.get("name", tech_view.focused)),
 			String(def.get("desc", ""))]
 		d1.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		d1.custom_minimum_size = Vector2(800, 0)
+		d1.custom_minimum_size = Vector2(820, 0)
+		d1.add_theme_font_size_override("font_size", 14)
 		d1.add_theme_color_override("font_color", Color("#8fe0ff"))
 		body.add_child(d1)
-	var hint := Label.new()
-	hint.text = "点节点看详情；「＋」的节点点一下就能研发（缺资源会显示缺多少）。"
-	hint.add_theme_color_override("font_color", Color("#8ba0bb"))
-	body.add_child(hint)
+	# ⚠️ 底部那行操作提示已按玩家要求删掉 —— 它白占一行高度，把科技树的显示面积挤小了。
 
 
 func _tech_map() -> Dictionary:
@@ -1211,7 +1237,24 @@ func _materials_text() -> String:
 	return " · ".join(parts)
 
 ## 建造面板：列出可空投的塔与可铺的建筑（造价 + 「基座免间隔」提示）
+## 把面板内容包进**可滚动区** —— 建造/城镇这类列表会长过面板高度，
+## 不滚动的话下半截直接被裁掉（玩家报的「下面的 ui 边界都看不见，还不能上下滚动」）。
+## 返回内层 VBox：后续内容都往它里面塞。
+func _scrolled_body(body: Node, height: float = 520.0) -> Node:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, height)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	var inner := VBoxContainer.new()
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_theme_constant_override("separation", 6)
+	scroll.add_child(inner)
+	body.add_child(scroll)
+	return inner
+
+
 func _fill_build(body: Node) -> void:
+	body = _scrolled_body(body, 520.0)
 	var defs: Dictionary = DataLoader.new().table("towers", "TOWER_DEF", {})
 	var sdefs: Dictionary = DataLoader.new().table("towers", "STRUCTURE_DEF", {})
 	var head := Label.new()
@@ -1238,7 +1281,11 @@ func _fill_build(body: Node) -> void:
 		if tex != null:
 			var icon := TextureRect.new()
 			icon.texture = tex
-			icon.custom_minimum_size = Vector2(40, 40)
+			# 28px：列表里 24 行，图标一大就把面板顶爆。
+			# ⚠️ 必须同时设 expand_mode = IGNORE_SIZE —— 否则 TextureRect 会按**贴图原始尺寸**
+			#    （塔图是 192×192）撑开，custom_minimum_size 只是"最小"，压不住它。
+			icon.custom_minimum_size = Vector2(28, 28)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			row.add_child(icon)
 		name_l.text = Names.tower(String(id))
@@ -1862,6 +1909,26 @@ var hud_boss: ProgressBar = null
 var hud_boss_label: Label = null
 
 
+## HUD 卡片：给一组 HUD 控件套上科幻面板底。
+## 玩家要求：「物品栏还有地图和血量倒计时什么的 hud，不要只是文字悬浮在那，做一点风格适配」。
+func _hud_card(child: Control, pos: Vector2) -> PanelContainer:
+	var pc := PanelContainer.new()
+	pc.position = pos
+	var sb := UiTheme.hud_card_stylebox()
+	if sb != null:
+		pc.add_theme_stylebox_override("panel", sb)
+	else:
+		var flat := StyleBoxFlat.new()
+		flat.bg_color = Color(0.05, 0.07, 0.11, 0.72)
+		flat.set_corner_radius_all(6)
+		flat.set_border_width_all(1)
+		flat.border_color = Color(0.35, 0.45, 0.58, 0.5)
+		pc.add_theme_stylebox_override("panel", flat)
+	pc.add_child(child)
+	hud_root.add_child(pc)
+	return pc
+
+
 func _build_hud() -> void:
 	hud_root = Control.new()
 	hud_root.name = "Hud"
@@ -1869,13 +1936,11 @@ func _build_hud() -> void:
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	$UI.add_child(hud_root)
 
-	# 左上：生命条 + 弹药
+	# 左上：生命条 + 弹药（套一张 HUD 卡片底，不再是纯文字悬浮）
 	var box := VBoxContainer.new()
-	box.position = Vector2(14, 10)
-	box.custom_minimum_size = Vector2(320, 0)
-	hud_root.add_child(box)
+	box.custom_minimum_size = Vector2(300, 0)
 	hud_hp_bar = ProgressBar.new()
-	hud_hp_bar.custom_minimum_size = Vector2(260, 16)
+	hud_hp_bar.custom_minimum_size = Vector2(250, 16)
 	hud_hp_bar.show_percentage = false
 	hud_hp_bar.max_value = 1.0
 	box.add_child(hud_hp_bar)
@@ -1885,14 +1950,14 @@ func _build_hud() -> void:
 	hud_left = Label.new()
 	hud_left.add_theme_font_size_override("font_size", 14)
 	box.add_child(hud_left)
+	_hud_card(box, Vector2(8, 6))
 
-	# 顶部中间：波次状态
+	# 顶部中间：波次状态（同样套卡片）
 	hud_wave = Label.new()
-	hud_wave.position = Vector2(460, 8)
-	hud_wave.custom_minimum_size = Vector2(360, 0)
+	hud_wave.custom_minimum_size = Vector2(340, 0)
 	hud_wave.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud_wave.add_theme_font_size_override("font_size", 16)
-	hud_root.add_child(hud_wave)
+	_hud_card(hud_wave, Vector2(470, 4))
 
 	# ---- HUD 补全：对齐 HTML 版的信息量 ----
 	# 左上：天数 / 昼夜 / 时刻
@@ -1939,15 +2004,23 @@ func _build_hud() -> void:
 		slot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		slot.add_theme_font_size_override("font_size", 13)
 		slot.add_theme_color_override("font_color", Color("#c9d4e0"))
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.06, 0.08, 0.12, 0.7)
-		style.border_color = Color(0.35, 0.45, 0.58, 0.5)
-		style.set_border_width_all(1)
-		style.set_corner_radius_all(4)
-		slot.add_theme_stylebox_override("normal", style)
+		# 快捷栏格子也换成生图皮（和按钮同一套），不再是自己拼的纯色方块
+		var bs := UiTheme.button_stylebox()
+		if bs != null:
+			slot.add_theme_stylebox_override("normal", bs)
+		else:
+			var style := StyleBoxFlat.new()
+			style.bg_color = Color(0.06, 0.08, 0.12, 0.7)
+			style.border_color = Color(0.35, 0.45, 0.58, 0.5)
+			style.set_border_width_all(1)
+			style.set_corner_radius_all(4)
+			slot.add_theme_stylebox_override("normal", style)
 		hotbar_row.add_child(slot)
 		hud_hotbar.append(slot)
-	hud_root.add_child(hotbar_row)
+	# 整条快捷栏压在一块 HUD 卡片上（位置左移并限宽：8 格 × 100px + 卡片边距 ≈ 850px，
+	# 从 x=140 起正好居中；之前放 x=300 会把最后两格挤出屏幕）
+	hotbar_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_hud_card(hotbar_row, Vector2(140, 682))
 
 	# 右上：地点与资源
 	# 固定放在右上角：窗口是固定 1280×720，用绝对坐标比 anchor 组合更不容易出错
@@ -2585,7 +2658,57 @@ func _check_base_destroyed() -> void:
 			base_destroyed_shown = true
 			cam_rig.shake(18.0, 0.9)
 			add_hitstop(0.35, 0.05)
-			print("[godot] 核心舱被摧毁 —— 人口清零，吸引阵列停机，虫群转为追杀")
+			# 核心舱没了 = 没有复活点：再死一次就是这一局结束（玩家要求按设定走）
+			player.no_respawn = true
+			print("[godot] 核心舱被摧毁 —— 人口清零，吸引阵列停机，虫群转为追杀；玩家死亡将不再复活")
+
+
+## 这一局结束：全屏结算 —— 直接回主菜单或退出。
+##
+## 触发条件：核心舱已毁 + 玩家死亡（`PlayerSystem.final_death`）。
+## 之前没有任何"结束"状态，救援舱会无条件把人送回来 —— 玩家原话
+## 「核心舱没了我死了怎么还能复活呢，按设定不是游戏结束吗」。
+func _show_game_over() -> void:
+	if game_over_shown:
+		return
+	game_over_shown = true
+	paused = true
+	placing_tower = false
+	_hide_pause_panel()
+	var layer := CanvasLayer.new()
+	layer.name = "GameOver"
+	layer.layer = 90
+	add_child(layer)
+	var bg := ColorRect.new()
+	bg.color = Color(0.04, 0.02, 0.03, 0.82)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var box := VBoxContainer.new()
+	box.position = Vector2(360, 220)
+	box.custom_minimum_size = Vector2(560, 0)
+	box.add_theme_constant_override("separation", 14)
+	layer.add_child(box)
+	var t := Label.new()
+	t.text = "殖民地陷落"
+	t.add_theme_font_size_override("font_size", 44)
+	t.add_theme_color_override("font_color", Color("#ff5f6d"))
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(t)
+	var sub := Label.new()
+	sub.text = "核心舱已被摧毁，救援舱不会再来了。\n存活 %d 分钟 · 波次 %d" % [
+		int(run_time / 60.0) + 1, director.number]
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_color_override("font_color", Color("#c9d4e0"))
+	box.add_child(sub)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	row.add_child(_panel_btn("返回主菜单", func() -> void:
+		layer.queue_free()
+		get_tree().reload_current_scene()))
+	row.add_child(_panel_btn("退出到桌面", func() -> void: get_tree().quit()))
+	box.add_child(row)
+	print("[godot] 游戏结束 —— 殖民地陷落")
 
 ## 显示前置界面（世界还没生成，模拟也没跑）
 func _show_front_end() -> void:

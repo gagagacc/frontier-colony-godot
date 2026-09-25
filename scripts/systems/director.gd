@@ -1,4 +1,4 @@
-## 波次导演 + 吸引阵列 —— `src/systems/director.js` 的移植。
+﻿## 波次导演 + 吸引阵列 —— `src/systems/director.js` 的移植。
 ##
 ## 搬过来的规则（都是玩家反馈打磨出来的）：
 ##   - **波次预算** = (10 + Σ巢穴威胁 × 7.5) × (0.45 + 吸引强度) × (1 + 星球×0.16)
@@ -242,7 +242,7 @@ var _monster_def_table: Dictionary = {}
 
 func _monster_defs() -> Dictionary:
 	if _monster_def_table.is_empty():
-		_monster_def_table = DataLoader.new().table("monsters", "MONSTER_DEF", {})
+		_monster_def_table = DataLoader.monster_defs()
 	return _monster_def_table
 
 

@@ -1,4 +1,4 @@
-## 怪物系统 —— `src/systems/enemies.js` 的移植（阶段 6 第一批：追击 + 攻击 + 受击 + 掉落）。
+﻿## 怪物系统 —— `src/systems/enemies.js` 的移植（阶段 6 第一批：追击 + 攻击 + 受击 + 掉落）。
 ##
 ## 这一批刻意只做「能打起来」的最小闭环，但每一条都照搬 JS 的规则：
 ##   - 数值来自 `EnemyFactory`（已黄金对比）；
@@ -45,7 +45,7 @@ func setup(p_world: GdWorld, p_player: Node2D, p_projectiles: Node2D) -> void:
 	world = p_world
 	player = p_player
 	projectiles = p_projectiles
-	var defs: Dictionary = DataLoader.new().table("monsters", "MONSTER_DEF", {})
+	var defs: Dictionary = DataLoader.monster_defs()
 	for k in defs.keys():
 		var d: Dictionary = defs[k]
 		if GdMath.truthy(d.get("boss", false)):
@@ -470,7 +470,7 @@ func _draw() -> void:
 
 ## 副本 Boss（阶段 6 的三件套：预警冲撞 / 弹幕 / 召唤）
 func spawn_dungeon_boss(tier: int, x: float, y: float) -> Dictionary:
-	var defs: Dictionary = DataLoader.new().table("monsters", "MONSTER_DEF", {})
+	var defs: Dictionary = DataLoader.monster_defs()
 	# 与 JS 一致：65% 巢穴吞噬者 / 35% 虚空女妖
 	var boss_type: String = "nestDevourer" if world.rng.chance(0.65) else "voidSiren"
 	var d: Dictionary = defs.get(boss_type, {})
@@ -537,7 +537,7 @@ func _spawn_guard(x: float, y: float, tier: int) -> bool:
 	var type: Variant = world.rng.weighted(pool)
 	if type == null:
 		return false
-	var defs: Dictionary = DataLoader.new().table("monsters", "MONSTER_DEF", {})
+	var defs: Dictionary = DataLoader.monster_defs()
 	var d: Dictionary = defs.get(String(type), {})
 	if d.is_empty():
 		return false

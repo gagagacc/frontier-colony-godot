@@ -95,12 +95,24 @@ func _physics_process(delta: float) -> void:
 		loadout.update(delta)
 		if Input.is_key_pressed(KEY_R):
 			loadout.start_reload()
-		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		# ⚠️ 开火必须排除「鼠标在 UI 上」：
+		#    这里是**轮询**鼠标左键的，而 UI 按钮吃的是事件 —— 两者互不排斥，
+		#    于是点任何面板按钮都会顺带开枪（玩家报的「在各种界面点击也会触发发射子弹」）。
+		#    `gui_get_hovered_control()` 为 null 才说明鼠标真的在游戏画面上。
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and _can_fire():
 			_fire()
 	if _muzzle_flash > 0.0:
 		_muzzle_flash = maxf(0.0, _muzzle_flash - delta * 6.0)
 
 	queue_redraw()
+
+
+## 现在允许开火吗？鼠标悬停在任何 UI 控件上时不允许。
+func _can_fire() -> bool:
+	var vp := get_viewport()
+	if vp == null:
+		return true
+	return vp.gui_get_hovered_control() == null
 
 
 func _fire() -> void:
@@ -199,6 +211,10 @@ const RESPAWN_INVULN := 3.0
 signal died
 ## 开火（参数：枪口位置、是否重武器）—— 用来接光照与音效
 signal fired(pos: Vector2, heavy: bool)
+## 核心舱已毁时死亡 → 不再复活（这一局结束）。由 Game 弹结算/主菜单。
+signal final_death
+## 基地没了之后置 true：`respawn()` 不再执行救援
+var no_respawn := false
 signal hurt(mag: float)
 signal respawned
 
@@ -249,6 +265,13 @@ func _tick_death(dt: float) -> void:
 
 
 func respawn() -> void:
+	# 核心舱没了就**没有复活点**：按设定这一局结束，不再"救援舱把人送回来"。
+	# （玩家原话：「核心舱没了我死了怎么还能复活呢，按设定不是游戏结束吗」）
+	if no_respawn:
+		hp = 0.0
+		dead = true
+		final_death.emit()
+		return
 	dead = false
 	hp = hp_max * RESPAWN_HP_FRACTION
 	invuln = RESPAWN_INVULN

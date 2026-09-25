@@ -1,4 +1,4 @@
-## 名字解析 —— 界面上**不许再出现英文键**（玩家要求：「把英文全翻译成中文」）。
+﻿## 名字解析 —— 界面上**不许再出现英文键**（玩家要求：「把英文全翻译成中文」）。
 ##
 ## 名字全部来自数据表，不手抄：
 ##   - 资源：`tiles.json` 的 `RESOURCE_DEF[key].name`（金币 / 金属 / 晶体 / 零件 …）
@@ -33,7 +33,7 @@ static func _rarity_defs() -> Dictionary:
 
 static func _mon_defs() -> Dictionary:
 	if _mon.is_empty():
-		_mon = DataLoader.new().table("monsters", "MONSTER_DEF", {})
+		_mon = DataLoader.monster_defs()
 	return _mon
 
 
